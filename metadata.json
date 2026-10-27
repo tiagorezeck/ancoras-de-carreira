@@ -1,0 +1,6 @@
+{
+  "name": "Âncoras de Carreira",
+  "description": "Teste do modelo de Âncoras de Carreira de Edgar Schein para identificar seus pilares e motivações profissionais.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
