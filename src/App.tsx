@@ -12,6 +12,8 @@ import {
   SCALE_DESCRIPTIONS,
   getSynergyAnalysis,
   ANCHOR_TUTORIAL_DATA,
+  SampleProfile,
+  SAMPLE_PROFILES,
 } from './data';
 import {
   Sun,
@@ -41,13 +43,22 @@ import {
   ListChecks,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   HelpCircle,
   Eye,
   SlidersHorizontal,
   BookOpen,
   Lightbulb,
   AlertTriangle,
+  Play,
+  X,
+  CheckSquare,
+  Square,
+  Clock,
 } from 'lucide-react';
+import CabinApp from './CabinApp';
+import RiasecApp from './RiasecApp';
+import IntegratedReportApp from './IntegratedReportApp';
 
 const STORAGE_KEY = 'ancora-carreira-progress-v1';
 const THEME_STORAGE_KEY = 'ancora-carreira-theme';
@@ -59,67 +70,6 @@ const BONUS_POINTS = 4;
 const ANCHOR_ORDER: AnchorLetter[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const AUTO_ADVANCE_MS = 280;
 
-export interface SampleProfile {
-  id: string;
-  name: string;
-  roleExample: string;
-  description: string;
-  dominantLetter: AnchorLetter;
-  secondaryLetter: AnchorLetter;
-  ratings: Record<number, number>;
-  bonus: number[];
-}
-
-export const SAMPLE_PROFILES: SampleProfile[] = [
-  {
-    id: 'tech-specialist',
-    name: 'Especialista Técnico & Autônomo',
-    roleExample: 'Tech Lead / Engenheiro Sênior / Pesquisador',
-    description: 'Alta motivação por excelência técnica e domínio de ferramentas, com forte necessidade de liberdade metodológica.',
-    dominantLetter: 'A',
-    secondaryLetter: 'C',
-    ratings: {
-      1: 6, 2: 3, 3: 6, 4: 2, 5: 4, 6: 3, 7: 5, 8: 4,
-      9: 6, 10: 2, 11: 5, 12: 3, 13: 4, 14: 3, 15: 4, 16: 3,
-      17: 5, 18: 2, 19: 6, 20: 2, 21: 4, 22: 3, 23: 5, 24: 4,
-      25: 6, 26: 2, 27: 5, 28: 2, 29: 4, 30: 3, 31: 4, 32: 3,
-      33: 6, 34: 2, 35: 6, 36: 3, 37: 4, 38: 3, 39: 5, 40: 3,
-    },
-    bonus: [1, 9, 19],
-  },
-  {
-    id: 'executive-leader',
-    name: 'Líder Corporativo & Desafio Puro',
-    roleExample: 'Diretor Geral / Head de Operações / Turnaround',
-    description: 'Orientado para a gestão de grandes equipes, decisões executivas de alto impacto e conquista de metas difíceis.',
-    dominantLetter: 'B',
-    secondaryLetter: 'G',
-    ratings: {
-      1: 3, 2: 6, 3: 3, 4: 3, 5: 4, 6: 3, 7: 6, 8: 3,
-      9: 2, 10: 6, 11: 3, 12: 3, 13: 4, 14: 4, 15: 6, 16: 2,
-      17: 2, 18: 6, 19: 3, 20: 3, 21: 4, 22: 3, 23: 6, 24: 2,
-      25: 2, 26: 6, 27: 3, 28: 4, 29: 3, 30: 3, 31: 6, 32: 2,
-      33: 2, 34: 6, 35: 3, 36: 3, 37: 4, 38: 3, 39: 6, 40: 2,
-    },
-    bonus: [2, 10, 18],
-  },
-  {
-    id: 'cause-lifestyle',
-    name: 'Causa Social & Estilo de Vida',
-    roleExample: 'Líder de Impacto / Gestor ESG / Educador',
-    description: 'Pautado por valores éticos e impacto humano transformador, preservando o equilíbrio com saúde e família.',
-    dominantLetter: 'F',
-    secondaryLetter: 'H',
-    ratings: {
-      1: 3, 2: 3, 3: 4, 4: 3, 5: 3, 6: 6, 7: 4, 8: 6,
-      9: 3, 10: 2, 11: 4, 12: 4, 13: 3, 14: 6, 15: 3, 16: 6,
-      17: 2, 18: 2, 19: 4, 20: 4, 21: 3, 22: 6, 23: 3, 24: 6,
-      25: 2, 26: 2, 27: 4, 28: 3, 29: 3, 30: 6, 31: 3, 32: 6,
-      33: 3, 34: 2, 35: 4, 36: 4, 37: 3, 38: 6, 39: 3, 40: 6,
-    },
-    bonus: [6, 8, 30],
-  },
-];
 
 interface SavedState {
   blockIndex: number;
@@ -239,6 +189,35 @@ export default function App() {
   type ResultTab = 'overview' | 'anchors' | 'synergy' | 'audit';
 
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [activeModule, setActiveModule] = useState<'ancoras' | 'cabin' | 'riasec' | 'integrated'>('ancoras');
+
+  // Helpers to read CABIN and RIASEC progress from localStorage safely
+  const getCabinAnswersFromStorage = (): Record<number, number> => {
+    try {
+      const raw = localStorage.getItem('comet_cabin_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.answers === 'object') {
+          return parsed.answers;
+        }
+      }
+    } catch (e) {}
+    return {};
+  };
+
+  const getRiasecAnswersFromStorage = (): any => {
+    try {
+      const raw = localStorage.getItem('comet_riasec_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.answers === 'object') {
+          return parsed.answers;
+        }
+      }
+    } catch (e) {}
+    return {};
+  };
+
   const [screen, setScreen] = useState<Screen>('home');
   const [blockIndex, setBlockIndex] = useState<number>(0);
   const [ratings, setRatings] = useState<Record<number, number>>({});
@@ -248,6 +227,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [activeDemoId, setActiveDemoId] = useState<string>(SAMPLE_PROFILES[0].id);
+  const [categoryHubExpanded, setCategoryHubExpanded] = useState<boolean>(true);
   const [tutorialFilter, setTutorialFilter] = useState<'all' | 'top' | AnchorLetter>('all');
   const [expandedTutorialLetters, setExpandedTutorialLetters] = useState<Record<string, boolean>>({
     A: true,
@@ -273,6 +253,229 @@ export default function App() {
       next[l] = expand;
     });
     setExpandedTutorialLetters(next);
+  };
+
+  // Evaluation launcher & journey states
+  const [isStartTestModalOpen, setIsStartTestModalOpen] = useState<boolean>(false);
+  const [testModeSelection, setTestModeSelection] = useState<'integrated' | 'individual'>('integrated');
+  const [selectedIndividualTest, setSelectedIndividualTest] = useState<'ancoras' | 'cabin' | 'riasec'>('ancoras');
+  const [selectedIntegratedModules, setSelectedIntegratedModules] = useState<{
+    ancoras: boolean;
+    cabin: boolean;
+    riasec: boolean;
+  }>({
+    ancoras: true,
+    cabin: true,
+    riasec: true,
+  });
+
+  interface IntegratedJourneyState {
+    active: boolean;
+    queue: ('ancoras' | 'cabin' | 'riasec')[];
+    currentIndex: number;
+  }
+
+  const [integratedJourney, setIntegratedJourney] = useState<IntegratedJourneyState>({
+    active: false,
+    queue: ['ancoras', 'cabin', 'riasec'],
+    currentIndex: 0,
+  });
+
+  const [cabinInitialStep, setCabinInitialStep] = useState<'intro' | 'instructions' | 'test' | 'review' | 'report' | undefined>(undefined);
+  const [riasecInitialScreen, setRiasecInitialScreen] = useState<'home' | 'quiz' | 'result' | undefined>(undefined);
+
+  const getModuleName = (mod: 'ancoras' | 'cabin' | 'riasec'): string => {
+    switch (mod) {
+      case 'ancoras':
+        return '1. Âncoras de Carreira (Valores)';
+      case 'cabin':
+        return '2. CABIN Interesses Básicos (Atividades)';
+      case 'riasec':
+        return '3. RIASEC Holland (Ambientes)';
+    }
+  };
+
+  const getNextModuleName = (): string | undefined => {
+    if (!integratedJourney.active) return undefined;
+    const nextIdx = integratedJourney.currentIndex + 1;
+    if (nextIdx < integratedJourney.queue.length) {
+      return getModuleName(integratedJourney.queue[nextIdx]);
+    }
+    return undefined;
+  };
+
+  // Handler to start an individual test
+  const handleStartIndividualTest = (mod: 'ancoras' | 'cabin' | 'riasec') => {
+    setIntegratedJourney({ active: false, queue: [], currentIndex: 0 });
+    setIsStartTestModalOpen(false);
+
+    if (mod === 'ancoras') {
+      setActiveModule('ancoras');
+      if (screen !== 'quiz') {
+        setScreen('quiz');
+      }
+    } else if (mod === 'cabin') {
+      setActiveModule('cabin');
+      setCabinInitialStep('test');
+    } else if (mod === 'riasec') {
+      setActiveModule('riasec');
+      setRiasecInitialScreen('quiz');
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast(`Iniciando avaliação: ${getModuleName(mod)}`);
+  };
+
+  // Handler to start the integrated journey
+  const handleStartIntegratedJourney = () => {
+    const queue: ('ancoras' | 'cabin' | 'riasec')[] = [];
+    if (selectedIntegratedModules.ancoras) queue.push('ancoras');
+    if (selectedIntegratedModules.cabin) queue.push('cabin');
+    if (selectedIntegratedModules.riasec) queue.push('riasec');
+
+    const finalQueue = queue.length > 0 ? queue : (['ancoras', 'cabin', 'riasec'] as const);
+    const first = finalQueue[0];
+
+    setIntegratedJourney({
+      active: true,
+      queue: finalQueue as ('ancoras' | 'cabin' | 'riasec')[],
+      currentIndex: 0,
+    });
+    setIsStartTestModalOpen(false);
+
+    if (first === 'ancoras') {
+      setActiveModule('ancoras');
+      setScreen('quiz');
+    } else if (first === 'cabin') {
+      setActiveModule('cabin');
+      setCabinInitialStep('test');
+    } else if (first === 'riasec') {
+      setActiveModule('riasec');
+      setRiasecInitialScreen('quiz');
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast(`Iniciando Jornada Integrada COMET — Etapa 1 de ${finalQueue.length}: ${getModuleName(first)}`);
+  };
+
+  // Handler to advance to the next test in the integrated journey
+  const handleAdvanceIntegratedJourney = () => {
+    const nextIndex = integratedJourney.currentIndex + 1;
+    if (nextIndex < integratedJourney.queue.length) {
+      const nextMod = integratedJourney.queue[nextIndex];
+      setIntegratedJourney((prev) => ({
+        ...prev,
+        currentIndex: nextIndex,
+      }));
+
+      if (nextMod === 'ancoras') {
+        setActiveModule('ancoras');
+        setScreen('quiz');
+      } else if (nextMod === 'cabin') {
+        setActiveModule('cabin');
+        setCabinInitialStep('test');
+      } else if (nextMod === 'riasec') {
+        setActiveModule('riasec');
+        setRiasecInitialScreen('quiz');
+      }
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      showToast(`Avançando para Etapa ${nextIndex + 1} de ${integratedJourney.queue.length}: ${getModuleName(nextMod)}`);
+    } else {
+      setIntegratedJourney((prev) => ({ ...prev, active: false }));
+      showToast('🎉 Parabéns! Você concluiu todos os testes da sua Jornada Integrada! Abrindo Dossiê Integrado...');
+      setActiveModule('integrated');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // Status summaries for the Thematic Category Hub (Perfil Profissional)
+  const getModuleSummary = () => {
+    // 1. Âncoras de Carreira
+    const ancorasAnswered = Object.keys(ratings).length;
+    let ancorasStatus = {
+      label: 'Disponível',
+      detail: '40 afirmações',
+      isCompleted: false,
+      badgeClass: 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border-slate-500/20',
+    };
+    if (screen === 'result' || (ancorasAnswered >= 40 && bonus.length > 0)) {
+      ancorasStatus = {
+        label: 'Relatório Pronto',
+        detail: '40/40 respondidas',
+        isCompleted: true,
+        badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+      };
+    } else if (ancorasAnswered > 0) {
+      ancorasStatus = {
+        label: `Em andamento (${ancorasAnswered}/40)`,
+        detail: `Bloco ${blockIndex + 1} de 10`,
+        isCompleted: false,
+        badgeClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+      };
+    }
+
+    // 2. CABIN
+    let cabinStatus = {
+      label: 'Disponível',
+      detail: '164 atividades • 41 escalas',
+      isCompleted: false,
+      badgeClass: 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border-slate-500/20',
+    };
+    try {
+      const saved = localStorage.getItem('comet_cabin_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const count = Object.keys(parsed || {}).length;
+        if (count >= 164) {
+          cabinStatus = {
+            label: 'Relatório Pronto',
+            detail: '164/164 respondidas',
+            isCompleted: true,
+            badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+          };
+        } else if (count > 0) {
+          cabinStatus = {
+            label: `Em andamento (${count}/164)`,
+            detail: 'Salvo localmente',
+            isCompleted: false,
+            badgeClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+          };
+        }
+      }
+    } catch (e) {}
+
+    // 3. RIASEC
+    let riasecStatus = {
+      label: 'Disponível',
+      detail: '12 blocos • 72 itens',
+      isCompleted: false,
+      badgeClass: 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border-slate-500/20',
+    };
+    try {
+      const saved = localStorage.getItem('comet_riasec_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const blocks = Object.keys(parsed.answers || {}).length;
+        if (blocks >= 12) {
+          riasecStatus = {
+            label: 'Relatório Pronto',
+            detail: '12/12 blocos concluídos',
+            isCompleted: true,
+            badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+          };
+        } else if (blocks > 0) {
+          riasecStatus = {
+            label: `Em andamento (${blocks}/12)`,
+            detail: 'Salvo localmente',
+            isCompleted: false,
+            badgeClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+          };
+        }
+      }
+    } catch (e) {}
+
+    return { ancoras: ancorasStatus, cabin: cabinStatus, riasec: riasecStatus };
   };
 
   const [dialog, setDialog] = useState<{
@@ -682,40 +885,135 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
           borderColor: 'var(--border-color)',
         }}
       >
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <button
-            onClick={() => {
-              if (screen !== 'home') {
-                openResetDialog(() => {
-                  setIsDemoMode(false);
-                  setScreen('home');
-                });
-              }
-            }}
-            className="flex items-center gap-3 text-left focus:outline-none group cursor-pointer"
-          >
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-sm transition-transform group-hover:scale-105"
-              style={{ backgroundColor: 'var(--accent)' }}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 sm:gap-6 min-w-0">
+            <button
+              onClick={() => {
+                if (activeModule === 'ancoras' && screen !== 'home') {
+                  openResetDialog(() => {
+                    setIsDemoMode(false);
+                    setScreen('home');
+                  });
+                }
+              }}
+              className="flex items-center gap-2.5 text-left focus:outline-none group cursor-pointer shrink-0"
             >
-              ⚓
-            </div>
-            <div>
-              <div className="font-semibold text-base tracking-tight flex items-center gap-2">
-                <span>Âncoras de Carreira</span>
-                <span className="text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border border-indigo-500/20 text-indigo-500 bg-indigo-500/10">
-                  Edgar Schein
-                </span>
-                {isDemoMode && (
-                  <span className="hidden sm:inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                    Modo Exemplo Fictício
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-sm transition-transform group-hover:scale-105"
+                style={{
+                  backgroundColor:
+                    activeModule === 'integrated'
+                      ? '#0f766e'
+                      : activeModule === 'cabin'
+                      ? '#14b8a6'
+                      : activeModule === 'riasec'
+                      ? '#6366f1'
+                      : 'var(--accent)',
+                }}
+              >
+                {activeModule === 'integrated' ? '📊' : activeModule === 'cabin' ? '🧭' : activeModule === 'riasec' ? '🎯' : '⚓'}
+              </div>
+              <div className="hidden min-[480px]:block">
+                <div className="font-semibold text-sm sm:text-base tracking-tight flex items-center gap-1.5">
+                  <span>
+                    {activeModule === 'integrated'
+                      ? 'Relatório Integrado'
+                      : activeModule === 'cabin'
+                      ? 'CABIN Interesses'
+                      : activeModule === 'riasec'
+                      ? 'RIASEC Holland'
+                      : 'Âncoras de Carreira'}
                   </span>
-                )}
+                  <span
+                    className={`text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border ${
+                      activeModule === 'integrated'
+                        ? 'border-indigo-500/40 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10'
+                        : activeModule === 'cabin'
+                        ? 'border-teal-500/30 text-teal-600 dark:text-teal-400 bg-teal-500/10'
+                        : activeModule === 'riasec'
+                        ? 'border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10'
+                        : 'border-indigo-500/20 text-indigo-500 bg-indigo-500/10'
+                    }`}
+                  >
+                    {activeModule === 'integrated'
+                      ? 'COMET Tríade'
+                      : activeModule === 'cabin'
+                      ? 'Su et al.'
+                      : activeModule === 'riasec'
+                      ? 'John Holland'
+                      : 'Edgar Schein'}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {activeModule === 'integrated'
+                    ? 'Afinidades · Atividades · Valores & Direcionamento'
+                    : activeModule === 'cabin'
+                    ? '41 Interesses • 8 Dimensões SETPOINT'
+                    : activeModule === 'riasec'
+                    ? '12 Blocos • 72 Itens • Código Holland'
+                    : 'Inventário Psicométrico Profissional'}
+                </div>
               </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                Inventário Psicométrico Profissional
-              </div>
+            </button>
+
+            {/* Alternador dos 4 Módulos da Área Mentalidade (Assessment COMET) */}
+            <div className="flex items-center p-1 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 border border-slate-300/60 dark:border-slate-700/60 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveModule('ancoras')}
+                title="1. Âncoras de Carreira — Valores e Motivações Profissionais"
+                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeModule === 'ancoras'
+                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>⚓ 1. Âncoras</span>
+                <span className="hidden lg:inline text-[10px] font-normal opacity-75">(Valores)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveModule('cabin')}
+                title="2. CABIN — Interesses Básicos por Atividades"
+                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeModule === 'cabin'
+                    ? 'bg-teal-500 text-slate-950 font-black shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>🧭 2. CABIN</span>
+                <span className="hidden lg:inline text-[10px] font-normal opacity-85">(Atividades)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveModule('riasec')}
+                title="3. RIASEC — Categorias e Ambientes Vocacionais"
+                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeModule === 'riasec'
+                    ? 'bg-indigo-600 text-white font-black shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>🎯 3. RIASEC</span>
+                <span className="hidden lg:inline text-[10px] font-normal opacity-85">(Ambientes)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveModule('integrated')}
+                title="4. Relatório Integrado — Escolhas e Direcionamento de Carreira"
+                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeModule === 'integrated'
+                    ? 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-teal-600 text-white font-black shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>📊 4. Integrado</span>
+                <span className="text-[9px] px-1 rounded font-black bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 hidden sm:inline">
+                  DOSSIÊ
+                </span>
+              </button>
             </div>
-          </button>
+          </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
             {screen === 'quiz' && (
@@ -790,8 +1088,391 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
         </div>
       </header>
 
+      {/* ========================================================================= */}
+      {/* CATEGORIA TEMÁTICA: PERFIL PROFISSIONAL — ESCOLHAS E DIRECIONAMENTO DE CARREIRA */}
+      {/* ========================================================================= */}
+      <section
+        className="border-b transition-colors duration-200 no-print"
+        style={{
+          backgroundColor:
+            theme === 'dark' ? 'rgba(15, 23, 42, 0.75)' : 'rgba(241, 245, 249, 0.85)',
+          borderColor: 'var(--border-color)',
+        }}
+      >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5">
+          {/* Top Breadcrumb & Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2 text-xs font-semibold tracking-wide flex-wrap">
+              <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                ASSESSMENT COMET
+              </span>
+              <span className="text-slate-400 dark:text-slate-600">/</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                ÁREA MENTALIDADE
+              </span>
+              <span className="text-slate-400 dark:text-slate-600">/</span>
+              <span className="text-indigo-600 dark:text-indigo-400 font-bold uppercase text-[11px]">
+                CATEGORIA TEMÁTICA
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>3 Instrumentos Independentes</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setCategoryHubExpanded(!categoryHubExpanded)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition cursor-pointer"
+                title={categoryHubExpanded ? 'Recolher detalhes da categoria' : 'Expandir os 3 instrumentos'}
+              >
+                <span>{categoryHubExpanded ? 'Recolher Painel' : 'Ver os 3 Instrumentos'}</span>
+                {categoryHubExpanded ? (
+                  <ChevronUp className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Heading and Clarifying Summary */}
+          <div className="mb-3.5">
+            <h1 className="text-lg sm:text-2xl lg:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+              PERFIL PROFISSIONAL
+              <span className="block sm:inline sm:ml-2 text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-teal-500 to-indigo-400">
+                — Escolhas e Direcionamento de Carreira
+              </span>
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 max-w-3xl leading-relaxed">
+              Agrupamento por afinidade temática e finalidade de aplicação. Três instrumentos psicométricos consagrados que investigam diferentes facetas da decisão de carreira — mantendo questionários, cálculos e relatórios 100% autônomos.
+            </p>
+          </div>
+
+          {/* Expanded 3-Card Grid */}
+          {categoryHubExpanded ? (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              {/* BOTÃO PRINCIPAL DE REALIZAR TESTE (INDIVIDUAL OU INTEGRADO) — ACIMA DOS CARDS */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-indigo-500/15 via-teal-500/10 to-indigo-500/15 border-2 border-indigo-500/30 dark:border-indigo-500/25 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 to-teal-500 text-white flex items-center justify-center font-bold text-xl shadow-md shrink-0">
+                    ⚡
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                        Realizar Avaliação Profissional
+                      </h2>
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-indigo-600 text-white shadow-xs uppercase tracking-wide">
+                        Individual ou Integrado
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
+                      Clique no botão para escolher se prefere realizar um <strong>teste individual</strong> (1 instrumento) ou a <strong>jornada integrada</strong> (os 3 testes em sequência guiada).
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveModule('integrated');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl border font-bold text-xs sm:text-sm transition-all duration-200 cursor-pointer ${
+                      activeModule === 'integrated'
+                        ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-500/20'
+                        : 'bg-white/80 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4 text-indigo-500" />
+                    <span>Relatório Integrado</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsStartTestModalOpen(true)}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-teal-600 hover:from-indigo-500 hover:to-teal-500 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all duration-200 cursor-pointer active:scale-95 group"
+                  >
+                    <Play className="w-4 h-4 fill-current group-hover:scale-110 transition-transform" />
+                    <span>Realizar Teste / Iniciar Avaliação</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* GRID COM OS 3 CARDS EXPLICATIVOS DE CADA ÁREA */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+                {/* CARD 1: ÂNCORAS */}
+                {(() => {
+                  const summary = getModuleSummary();
+                  const isCur = activeModule === 'ancoras';
+                  return (
+                    <div
+                      onClick={() => {
+                        setActiveModule('ancoras');
+                        setScreen('home');
+                      }}
+                      className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer relative group flex flex-col justify-between ${
+                        isCur
+                          ? 'bg-indigo-500/10 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md'
+                          : 'bg-white/70 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-indigo-400/50'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-600 text-white font-bold text-sm shadow-xs">
+                              ⚓
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 block">
+                                Edgar Schein • MIT
+                              </span>
+                              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight">
+                                1. Âncoras de Carreira
+                              </h3>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${summary.ancoras.badgeClass}`}>
+                            {summary.ancoras.label}
+                          </span>
+                        </div>
+
+                        <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-1">
+                          Foco: Valores e Motivações Profissionais
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
+                          Identifica aquilo que você jamais abriria mão em um momento de escolha de carreira (autonomia, segurança, desafio, etc.).
+                        </p>
+                      </div>
+
+                      <div className="pt-2.5 border-t border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 dark:text-slate-400">
+                          40 afirmações • 8 âncoras
+                        </span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                          {isCur ? 'Ver Explicação' : 'Acessar Âncoras'} →
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* CARD 2: CABIN */}
+                {(() => {
+                  const summary = getModuleSummary();
+                  const isCur = activeModule === 'cabin';
+                  return (
+                    <div
+                      onClick={() => {
+                        setActiveModule('cabin');
+                        setCabinInitialStep('intro');
+                      }}
+                      className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer relative group flex flex-col justify-between ${
+                        isCur
+                          ? 'bg-teal-500/10 border-teal-500 ring-2 ring-teal-500/20 shadow-md'
+                          : 'bg-white/70 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-teal-400/50'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-teal-500 text-slate-950 font-bold text-sm shadow-xs">
+                              🧭
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400 block">
+                                Su et al. (2019)
+                              </span>
+                              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight">
+                                2. CABIN Interesses
+                              </h3>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${summary.cabin.badgeClass}`}>
+                            {summary.cabin.label}
+                          </span>
+                        </div>
+
+                        <div className="text-xs font-semibold text-teal-600 dark:text-teal-400 mb-1">
+                          Foco: Interesses Básicos por Atividades
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
+                          Mapeia sua atração prática por tarefas e rotinas do mundo real em 41 áreas ocupacionais e 8 dimensões SETPOINT.
+                        </p>
+                      </div>
+
+                      <div className="pt-2.5 border-t border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 dark:text-slate-400">
+                          164 atividades • 41 escalas • 8 SETPOINT
+                        </span>
+                        <span className="font-bold text-teal-600 dark:text-teal-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                          {isCur ? 'Ver Explicação' : 'Acessar CABIN'} →
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* CARD 3: RIASEC */}
+                {(() => {
+                  const summary = getModuleSummary();
+                  const isCur = activeModule === 'riasec';
+                  return (
+                    <div
+                      onClick={() => {
+                        setActiveModule('riasec');
+                        setRiasecInitialScreen('home');
+                      }}
+                      className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer relative group flex flex-col justify-between ${
+                        isCur
+                          ? 'bg-indigo-600/10 border-indigo-600 ring-2 ring-indigo-600/20 shadow-md'
+                          : 'bg-white/70 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-indigo-400/50'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-600 text-white font-bold text-sm shadow-xs">
+                              🎯
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 block">
+                                John Holland
+                              </span>
+                              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight">
+                                3. RIASEC Holland
+                              </h3>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${summary.riasec.badgeClass}`}>
+                            {summary.riasec.label}
+                          </span>
+                        </div>
+
+                        <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-1">
+                          Foco: Categorias e Ambientes Vocacionais
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
+                          Avalia seus tipos vocacionais predominantes, a afinidade com ambientes organizacionais e o Código Holland de 3 letras.
+                        </p>
+                      </div>
+
+                      <div className="pt-2.5 border-t border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 dark:text-slate-400">
+                          12 blocos • 72 itens • 6 dimensões
+                        </span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                          {isCur ? 'Ver Explicação' : 'Acessar RIASEC'} →
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Notice of Strict Psychometric Independence */}
+              <div className="p-3.5 rounded-xl text-xs bg-slate-200/60 dark:bg-slate-800/40 border border-slate-300/60 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-slate-900 dark:text-slate-100">
+                    Diretriz de Independência Psicométrica:
+                  </strong>{' '}
+                  O agrupamento nesta categoria temática ocorre exclusivamente por afinidade e finalidade de aplicação.
+                  Cada instrumento mede aspectos diferentes e preserva integralmente sua identidade metodológica:
+                  três questionários independentes, três algoritmos de cálculo individuais e três relatórios separados. Não há pontuação combinada, classificação conjunta ou resultado único.
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Compact active module bar when collapsed */
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/50 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 text-xs">
+              <div className="flex items-center gap-2 truncate">
+                <span className="text-slate-500 dark:text-slate-400">Instrumento em foco:</span>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                  {activeModule === 'ancoras'
+                    ? '1. Âncoras de Carreira (Valores e Motivações)'
+                    : activeModule === 'cabin'
+                    ? '2. CABIN (Interesses Básicos por Atividades)'
+                    : activeModule === 'riasec'
+                    ? '3. RIASEC (Ambientes e Tipologias Vocacionais)'
+                    : '4. Relatório Integrado (Dossiê Estratégico)'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCategoryHubExpanded(true)}
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer shrink-0 ml-2"
+              >
+                <span>Expandir os 3 Instrumentos</span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* MAIN CONTAINER */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      {activeModule === 'integrated' ? (
+        <IntegratedReportApp
+          theme={theme}
+          onBackToMain={() => {
+            setActiveModule('ancoras');
+            setScreen('home');
+          }}
+          ancorasRatings={ratings}
+          ancorasBonus={bonus}
+          cabinAnswers={getCabinAnswersFromStorage()}
+          riasecAnswers={getRiasecAnswersFromStorage()}
+          onNavigateToModule={(mod) => {
+            setActiveModule(mod);
+            if (mod === 'ancoras') setScreen('home');
+          }}
+        />
+      ) : activeModule === 'cabin' ? (
+        <CabinApp
+          onBackToMain={() => {
+            setActiveModule('ancoras');
+            setScreen('home');
+          }}
+          initialStep={cabinInitialStep}
+          integratedInfo={
+            integratedJourney.active &&
+            integratedJourney.queue[integratedJourney.currentIndex] === 'cabin'
+              ? {
+                  currentStepNumber: integratedJourney.currentIndex + 1,
+                  totalSteps: integratedJourney.queue.length,
+                  nextModuleName: getNextModuleName(),
+                  onProceedNext: handleAdvanceIntegratedJourney,
+                }
+              : undefined
+          }
+        />
+      ) : activeModule === 'riasec' ? (
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+          <RiasecApp
+            theme={theme}
+            onBackToMain={() => {
+              setActiveModule('ancoras');
+              setScreen('home');
+            }}
+            initialScreen={riasecInitialScreen}
+            integratedInfo={
+              integratedJourney.active &&
+              integratedJourney.queue[integratedJourney.currentIndex] === 'riasec'
+                ? {
+                    currentStepNumber: integratedJourney.currentIndex + 1,
+                    totalSteps: integratedJourney.queue.length,
+                    nextModuleName: getNextModuleName(),
+                    onProceedNext: handleAdvanceIntegratedJourney,
+                  }
+                : undefined
+            }
+          />
+        </main>
+      ) : (
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {/* ===================== HOME SCREEN ===================== */}
         {screen === 'home' && (
           <div className="space-y-10 animate-in fade-in duration-300">
@@ -1100,6 +1781,30 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
 
           return (
             <div className="space-y-8 animate-in fade-in duration-200">
+              {/* Banner de Jornada Integrada se ativo */}
+              {integratedJourney.active && (
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-500/15 via-teal-500/10 to-indigo-500/15 border border-indigo-500/30 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                  <div className="flex items-center gap-2.5">
+                    <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-black text-[11px] uppercase tracking-wider">
+                      Jornada Integrada
+                    </span>
+                    <div>
+                      <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                        Etapa {integratedJourney.currentIndex + 1} de {integratedJourney.queue.length}: Âncoras de Carreira
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block sm:inline sm:ml-2">
+                        (Valores e Motivações Profissionais)
+                      </span>
+                    </div>
+                  </div>
+                  {getNextModuleName() && (
+                    <span className="text-xs font-semibold text-indigo-500 dark:text-indigo-400">
+                      Próxima Etapa: {getNextModuleName()} →
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* BLOCK STEPPER BAR */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-semibold">
@@ -1457,6 +2162,34 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
 
           return (
             <div className="space-y-8 animate-in fade-in duration-300">
+              {/* Banner de Avanço na Jornada Integrada se ativo */}
+              {integratedJourney.active && (
+                <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-indigo-500/15 to-emerald-500/15 border-2 border-emerald-500/40 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black text-xs uppercase tracking-wide">
+                        Etapa {integratedJourney.currentIndex + 1} de {integratedJourney.queue.length} Concluída!
+                      </span>
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        Relatório Âncoras Salvo com Sucesso
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 font-medium">
+                      Você concluiu o teste Âncoras de Carreira. Você pode analisar seu relatório detalhado abaixo ou avançar agora para a próxima etapa: <strong>{getNextModuleName()}</strong>.
+                    </p>
+                  </div>
+                  {getNextModuleName() && (
+                    <button
+                      onClick={handleAdvanceIntegratedJourney}
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer shrink-0 hover:scale-105 active:scale-95"
+                    >
+                      <span>Avançar para {getNextModuleName()}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* DEMO NOTICE BANNER (if in demo mode) */}
               {isDemoMode && (
                 <div
@@ -2485,6 +3218,7 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
           );
         })()}
       </div>
+      )}
 
       {/* CONFIRMATION DIALOG MODAL */}
       {dialog.open && (
@@ -2534,6 +3268,410 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
               >
                 {dialog.confirmLabel || 'Confirmar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ESCOLHA DA MODALIDADE DE AVALIAÇÃO (INDIVIDUAL OU INTEGRADO) */}
+      {isStartTestModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="w-full max-w-2xl rounded-3xl border shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]"
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              borderColor: 'var(--border-color)',
+            }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="start-test-modal-title"
+          >
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 border-b flex items-center justify-between gap-4 shrink-0"
+              style={{ borderColor: 'var(--border-color)' }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-teal-500 text-white flex items-center justify-center font-bold text-lg shadow-md shrink-0">
+                  ⚡
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white" id="start-test-modal-title">
+                    Realizar Avaliação Profissional
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Assessment COMET • Escolha o formato de aplicação desejado
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsStartTestModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Fechar janela"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body - Scrollable */}
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
+              {/* Mode Switcher Tabs */}
+              <div className="grid grid-cols-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={() => setTestModeSelection('integrated')}
+                  className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                    testModeSelection === 'integrated'
+                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <span>🔗 Teste Integrado</span>
+                  <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 font-bold">
+                    Recomendado
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTestModeSelection('individual')}
+                  className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                    testModeSelection === 'individual'
+                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <span>🎯 Testes Individuais</span>
+                  <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 font-normal">
+                    1 a 1
+                  </span>
+                </button>
+              </div>
+
+              {/* TAB 1: TESTE INTEGRADO */}
+              {testModeSelection === 'integrated' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-xs sm:text-sm text-slate-700 dark:text-slate-200 space-y-1.5">
+                    <div className="font-extrabold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4" />
+                      <span>Jornada Completa em Sequência Guiada</span>
+                    </div>
+                    <p className="leading-relaxed">
+                      Você passará pelos instrumentos selecionados em uma experiência contínua e sem atritos. Ao finalizar cada teste, seu relatório específico é gerado e o sistema convida você para o próximo passo.
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                      🔒 <strong>Autonomia Metodológica:</strong> Cada instrumento preserva seu questionário original, cálculo psicométrico e relatório individual de 3 a 5 páginas. Não há fusão arbitrária de notas.
+                    </p>
+                  </div>
+
+                  {/* Checklist of modules to include */}
+                  <div className="space-y-2.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                      Instrumentos da Jornada (Personalize a seleção):
+                    </label>
+
+                    {/* Step 1: Âncoras */}
+                    <div
+                      onClick={() =>
+                        setSelectedIntegratedModules((prev) => ({
+                          ...prev,
+                          ancoras: !prev.ancoras,
+                        }))
+                      }
+                      className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        selectedIntegratedModules.ancoras
+                          ? 'border-indigo-500/60 bg-indigo-50/50 dark:bg-indigo-950/20'
+                          : 'border-slate-200 dark:border-slate-800 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                          1
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                              Âncoras de Carreira (Edgar Schein • MIT)
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold border border-indigo-500/20">
+                              Valores
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            40 afirmações • ~10 min • Escala Likert 1 a 6 + 3 escolhas bônus
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-indigo-600 dark:text-indigo-400">
+                        {selectedIntegratedModules.ancoras ? (
+                          <CheckSquare className="w-5 h-5" />
+                        ) : (
+                          <Square className="w-5 h-5 text-slate-400" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Step 2: CABIN */}
+                    <div
+                      onClick={() =>
+                        setSelectedIntegratedModules((prev) => ({
+                          ...prev,
+                          cabin: !prev.cabin,
+                        }))
+                      }
+                      className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        selectedIntegratedModules.cabin
+                          ? 'border-teal-500/60 bg-teal-50/50 dark:bg-teal-950/20'
+                          : 'border-slate-200 dark:border-slate-800 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-lg bg-teal-500 text-slate-950 font-bold text-xs flex items-center justify-center shrink-0">
+                          2
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                              CABIN Interesses Básicos (Su et al., 2019)
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 font-semibold border border-teal-500/20">
+                              Atividades
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            164 atividades • ~15 min • 41 escalas e 8 dimensões SETPOINT
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-teal-600 dark:text-teal-400">
+                        {selectedIntegratedModules.cabin ? (
+                          <CheckSquare className="w-5 h-5" />
+                        ) : (
+                          <Square className="w-5 h-5 text-slate-400" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Step 3: RIASEC */}
+                    <div
+                      onClick={() =>
+                        setSelectedIntegratedModules((prev) => ({
+                          ...prev,
+                          riasec: !prev.riasec,
+                        }))
+                      }
+                      className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        selectedIntegratedModules.riasec
+                          ? 'border-indigo-600/60 bg-indigo-50/50 dark:bg-indigo-950/20'
+                          : 'border-slate-200 dark:border-slate-800 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                          3
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                              RIASEC Tipos Vocacionais (John Holland)
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold border border-indigo-500/20">
+                              Ambientes
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            12 blocos de ranqueamento (72 itens) • ~12 min • Código Holland
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-indigo-600 dark:text-indigo-400">
+                        {selectedIntegratedModules.riasec ? (
+                          <CheckSquare className="w-5 h-5" />
+                        ) : (
+                          <Square className="w-5 h-5 text-slate-400" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary Footer */}
+                  <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/50 flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-indigo-500" />
+                      <span>
+                        Duração total estimada:{' '}
+                        <strong>
+                          {(()=>{
+                            let t = 0;
+                            if (selectedIntegratedModules.ancoras) t += 10;
+                            if (selectedIntegratedModules.cabin) t += 15;
+                            if (selectedIntegratedModules.riasec) t += 12;
+                            return `~${t} minutos`;
+                          })()}
+                        </strong>
+                      </span>
+                    </span>
+                    <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                      {(()=>{
+                        let count = 0;
+                        if (selectedIntegratedModules.ancoras) count++;
+                        if (selectedIntegratedModules.cabin) count++;
+                        if (selectedIntegratedModules.riasec) count++;
+                        return `${count} de 3 selecionados`;
+                      })()}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: TESTES INDIVIDUAIS */}
+              {testModeSelection === 'individual' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+                    Selecione qual teste você deseja realizar individualmente agora:
+                  </p>
+
+                  <div className="space-y-3">
+                    {/* Option 1: Âncoras */}
+                    <div
+                      onClick={() => setSelectedIndividualTest('ancoras')}
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
+                        selectedIndividualTest === 'ancoras'
+                          ? 'border-indigo-500 bg-indigo-500/10 ring-2 ring-indigo-500/20 shadow-sm'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 border-indigo-600">
+                        {selectedIndividualTest === 'ancoras' && (
+                          <div className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                            1. Âncoras de Carreira (Edgar Schein • MIT)
+                          </h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                            ~10 min
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          Mapeia seus valores e motivações nucleares profissionais dos quais você não abriria mão em uma decisão de carreira.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Option 2: CABIN */}
+                    <div
+                      onClick={() => setSelectedIndividualTest('cabin')}
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
+                        selectedIndividualTest === 'cabin'
+                          ? 'border-teal-500 bg-teal-500/10 ring-2 ring-teal-500/20 shadow-sm'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 border-teal-500">
+                        {selectedIndividualTest === 'cabin' && (
+                          <div className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                            2. CABIN Interesses Básicos (Su et al., 2019)
+                          </h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400">
+                            ~15 min
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          Investiga sua atração prática por tarefas e rotinas do mundo real em 41 escalas e 8 dimensões SETPOINT.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Option 3: RIASEC */}
+                    <div
+                      onClick={() => setSelectedIndividualTest('riasec')}
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
+                        selectedIndividualTest === 'riasec'
+                          ? 'border-indigo-600 bg-indigo-600/10 ring-2 ring-indigo-600/20 shadow-md'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 border-indigo-600">
+                        {selectedIndividualTest === 'riasec' && (
+                          <div className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                            3. RIASEC Tipos Vocacionais (John Holland)
+                          </h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                            ~12 min
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          Descobre sua afinidade com ambientes organizacionais e calcula seu Código Holland de 3 letras dominantes.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-6 border-t flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0"
+              style={{ borderColor: 'var(--border-color)' }}
+            >
+              <button
+                type="button"
+                onClick={() => setIsStartTestModalOpen(false)}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+
+              {testModeSelection === 'integrated' ? (
+                <button
+                  type="button"
+                  onClick={handleStartIntegratedJourney}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-teal-600 hover:from-indigo-500 hover:to-teal-500 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-indigo-500/25 transition-all cursor-pointer active:scale-95"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>
+                    Iniciar Jornada Integrada (
+                    {(()=>{
+                      let count = 0;
+                      if (selectedIntegratedModules.ancoras) count++;
+                      if (selectedIntegratedModules.cabin) count++;
+                      if (selectedIntegratedModules.riasec) count++;
+                      return `${count} Etapa${count > 1 ? 's' : ''}`;
+                    })()}
+                    )
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleStartIndividualTest(selectedIndividualTest)}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-indigo-500/25 transition-all cursor-pointer active:scale-95"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>
+                    Iniciar Teste: {selectedIndividualTest === 'ancoras' ? 'Âncoras de Carreira' : selectedIndividualTest === 'cabin' ? 'CABIN Interesses' : 'RIASEC Holland'}
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>

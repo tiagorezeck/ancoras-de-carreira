@@ -696,3 +696,65 @@ export const ANCHOR_TUTORIAL_DATA: Record<AnchorLetter, AnchorTutorialItem> = {
   },
 };
 
+export interface SampleProfile {
+  id: string;
+  name: string;
+  roleExample: string;
+  description: string;
+  dominantLetter: AnchorLetter;
+  secondaryLetter: AnchorLetter;
+  ratings: Record<number, number>;
+  bonus: number[];
+}
+
+export const SAMPLE_PROFILES: SampleProfile[] = [
+  {
+    id: 'tech-specialist',
+    name: 'Especialista Técnico & Autônomo',
+    roleExample: 'Tech Lead / Engenheiro Sênior / Pesquisador',
+    description: 'Alta motivação por excelência técnica e domínio de ferramentas, com forte necessidade de liberdade metodológica.',
+    dominantLetter: 'A',
+    secondaryLetter: 'C',
+    ratings: {
+      1: 6, 2: 3, 3: 6, 4: 2, 5: 4, 6: 3, 7: 5, 8: 4,
+      9: 6, 10: 2, 11: 5, 12: 3, 13: 4, 14: 3, 15: 4, 16: 3,
+      17: 5, 18: 2, 19: 6, 20: 2, 21: 4, 22: 3, 23: 5, 24: 4,
+      25: 6, 26: 2, 27: 5, 28: 2, 29: 4, 30: 3, 31: 4, 32: 3,
+      33: 6, 34: 2, 35: 6, 36: 3, 37: 4, 38: 3, 39: 5, 40: 3,
+    },
+    bonus: [1, 9, 19],
+  },
+  {
+    id: 'executive-leader',
+    name: 'Líder Corporativo & Desafio Puro',
+    roleExample: 'Diretor Geral / Head de Operações / Turnaround',
+    description: 'Orientado para a gestão de grandes equipes, decisões executivas de alto impacto e conquista de metas difíceis.',
+    dominantLetter: 'B',
+    secondaryLetter: 'G',
+    ratings: {
+      1: 3, 2: 6, 3: 3, 4: 3, 5: 4, 6: 3, 7: 6, 8: 3,
+      9: 2, 10: 6, 11: 3, 12: 3, 13: 4, 14: 4, 15: 6, 16: 2,
+      17: 2, 18: 6, 19: 3, 20: 3, 21: 4, 22: 3, 23: 6, 24: 2,
+      25: 2, 26: 6, 27: 3, 28: 4, 29: 3, 30: 3, 31: 6, 32: 2,
+      33: 2, 34: 6, 35: 3, 36: 3, 37: 4, 38: 3, 39: 6, 40: 2,
+    },
+    bonus: [2, 10, 18],
+  },
+  {
+    id: 'cause-lifestyle',
+    name: 'Causa Social & Estilo de Vida',
+    roleExample: 'Líder de Impacto / Gestor ESG / Educador',
+    description: 'Pautado por valores éticos e impacto humano transformador, preservando o equilíbrio com saúde e família.',
+    dominantLetter: 'F',
+    secondaryLetter: 'H',
+    ratings: {
+      1: 3, 2: 3, 3: 4, 4: 3, 5: 3, 6: 6, 7: 4, 8: 6,
+      9: 3, 10: 2, 11: 4, 12: 4, 13: 3, 14: 6, 15: 3, 16: 6,
+      17: 2, 18: 2, 19: 4, 20: 4, 21: 3, 22: 6, 23: 3, 24: 6,
+      25: 2, 26: 2, 27: 4, 28: 3, 29: 3, 30: 6, 31: 3, 32: 6,
+      33: 3, 34: 2, 35: 4, 36: 4, 37: 3, 38: 6, 39: 3, 40: 6,
+    },
+    bonus: [6, 8, 30],
+  },
+];
+
