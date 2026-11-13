@@ -48,6 +48,10 @@ interface IntegratedReportAppProps {
   ancorasBonus?: number[];
   cabinAnswers?: Record<number, number>;
   riasecAnswers?: RiasecAnswers;
+  participantName?: string;
+  participantRole?: string;
+  participantDate?: string;
+  hideDemoSwitcher?: boolean;
   onNavigateToModule?: (module: 'ancoras' | 'cabin' | 'riasec') => void;
 }
 
@@ -61,6 +65,10 @@ export const IntegratedReportApp: React.FC<IntegratedReportAppProps> = ({
   ancorasBonus = [],
   cabinAnswers = {},
   riasecAnswers = {},
+  participantName,
+  participantRole,
+  participantDate,
+  hideDemoSwitcher = false,
   onNavigateToModule,
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
@@ -68,21 +76,22 @@ export const IntegratedReportApp: React.FC<IntegratedReportAppProps> = ({
   const [activeDemoId, setActiveDemoId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Check if user currently has real data in all 3
+  // Check if provided dataset currently has real data in all 3
   const userHasAncoras = Object.keys(ancorasRatings).length >= 40 && ancorasBonus.length > 0;
   const userHasCabin = Object.keys(cabinAnswers).length >= 164;
   const userHasRiasec = Object.keys(riasecAnswers).length >= 12;
   const userIsFullyComplete = userHasAncoras && userHasCabin && userHasRiasec;
 
-  // Active dataset: demo profile OR user state
+  // Active dataset: demo profile (only if switcher allowed) OR passed participant state
   const activeData = useMemo(() => {
-    if (activeDemoId) {
+    if (!hideDemoSwitcher && activeDemoId) {
       const demo = INTEGRATED_DEMO_PROFILES.find((p) => p.id === activeDemoId) || INTEGRATED_DEMO_PROFILES[0];
       return {
         isDemo: true,
         demoProfile: demo,
         name: demo.name,
         role: demo.role,
+        evaluationDate: new Date().toLocaleDateString('pt-BR'),
         ancorasRatings: demo.ancorasRatings,
         ancorasBonus: demo.ancorasBonus,
         cabinAnswers: demo.cabinAnswers,
@@ -93,14 +102,15 @@ export const IntegratedReportApp: React.FC<IntegratedReportAppProps> = ({
     return {
       isDemo: false,
       demoProfile: null,
-      name: 'Participante COMET',
-      role: 'Avaliação Profissional',
+      name: participantName || 'Participante COMET',
+      role: participantRole || 'Avaliação Profissional',
+      evaluationDate: participantDate || new Date().toLocaleDateString('pt-BR'),
       ancorasRatings,
       ancorasBonus,
       cabinAnswers,
       riasecAnswers,
     };
-  }, [activeDemoId, ancorasRatings, ancorasBonus, cabinAnswers, riasecAnswers]);
+  }, [hideDemoSwitcher, activeDemoId, ancorasRatings, ancorasBonus, cabinAnswers, riasecAnswers, participantName, participantRole, participantDate]);
 
   // Compute full integrated analysis
   const analysis: IntegratedProfileAnalysis = useMemo(() => {
@@ -112,7 +122,7 @@ export const IntegratedReportApp: React.FC<IntegratedReportAppProps> = ({
       {
         name: activeData.name,
         role: activeData.role,
-        evaluationDate: new Date().toLocaleDateString('pt-BR'),
+        evaluationDate: activeData.evaluationDate,
       }
     );
   }, [activeData]);
@@ -148,76 +158,66 @@ export const IntegratedReportApp: React.FC<IntegratedReportAppProps> = ({
         </div>
       )}
 
-      {/* TOP REPORT TOOLBAR (Navigation, Demo selector, Print) */}
-      <div className="sticky top-16 z-30 backdrop-blur-md border-b transition-colors duration-200 no-print"
+      {/* TOP REPORT TOOLBAR */}
+      <div className="border-b transition-colors duration-200 no-print"
         style={{
-          backgroundColor: isDark ? 'rgba(11, 15, 25, 0.92)' : 'rgba(255, 255, 255, 0.94)',
+          backgroundColor: isDark ? 'rgba(11, 15, 25, 0.7)' : 'rgba(255, 255, 255, 0.9)',
           borderColor: 'var(--border-color)',
         }}
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          {/* Breadcrumb & Title */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-teal-500 to-amber-500 text-white flex items-center justify-center font-black text-sm shadow-sm shrink-0">
-              📊
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">
-                  Assessment COMET • Área Mentalidade
-                </span>
-                <span className="text-slate-400 dark:text-slate-600 text-xs">/</span>
-                <span className="text-xs font-semibold text-teal-600 dark:text-teal-400">
-                  Relatório Integrado
-                </span>
-              </div>
-              <h1 className="text-sm sm:text-base font-extrabold tracking-tight truncate">
-                Perfil Profissional: Escolhas e Direcionamento de Carreira
-              </h1>
-            </div>
+          {/* Title */}
+          <div className="min-w-0">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+              Síntese & Interrelações P³
+            </span>
+            <h2 className="text-sm sm:text-base font-bold tracking-tight truncate">
+              Resumo dos 3 Instrumentos e Análise Cruzada
+            </h2>
           </div>
 
-          {/* Action buttons (Demo profiles switcher & Print) */}
+          {/* Action buttons (Demo profiles switcher only when allowed & Print) */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Demo profile switcher */}
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 text-xs">
-              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 px-1.5 hidden sm:inline">
-                Fonte:
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveDemoId(null);
-                  showToast('Exibindo dados reais do participante');
-                }}
-                className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${
-                  activeDemoId === null
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-                }`}
-              >
-                Dados Pessoais
-              </button>
-
-              {INTEGRATED_DEMO_PROFILES.map((d) => (
+            {!hideDemoSwitcher && (
+              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 text-xs">
+                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 px-1.5 hidden sm:inline">
+                  Fonte:
+                </span>
                 <button
-                  key={d.id}
                   type="button"
                   onClick={() => {
-                    setActiveDemoId(d.id);
-                    showToast(`Carregado perfil demonstrativo: ${d.name}`);
+                    setActiveDemoId(null);
+                    showToast('Exibindo dados reais do participante');
                   }}
-                  className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer hidden md:inline-flex items-center gap-1 ${
-                    activeDemoId === d.id
-                      ? 'bg-teal-500 text-slate-950 font-black shadow-xs'
+                  className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${
+                    activeDemoId === null
+                      ? 'bg-indigo-600 text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                   }`}
                 >
-                  <Eye className="w-3 h-3" />
-                  <span>{d.name.split(' ')[0]} ({d.role.split(' ')[0]})</span>
+                  Dados Pessoais
                 </button>
-              ))}
-            </div>
+
+                {INTEGRATED_DEMO_PROFILES.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveDemoId(d.id);
+                      showToast(`Carregado perfil demonstrativo: ${d.name}`);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer hidden md:inline-flex items-center gap-1 ${
+                      activeDemoId === d.id
+                        ? 'bg-teal-500 text-slate-950 font-black shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                    }`}
+                  >
+                    <Eye className="w-3 h-3" />
+                    <span>{d.name.split(' ')[0]} ({d.role.split(' ')[0]})</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Print button */}
             <button
@@ -227,7 +227,7 @@ export const IntegratedReportApp: React.FC<IntegratedReportAppProps> = ({
               title="Imprimir ou Salvar em PDF"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Imprimir / PDF</span>
+              <span>Imprimir / PDF</span>
             </button>
           </div>
         </div>
@@ -311,65 +311,69 @@ export const IntegratedReportApp: React.FC<IntegratedReportAppProps> = ({
         </div>
       </div>
 
-      {/* AUDIT READINESS BANNER (If real user has incomplete tests and is not viewing a demo) */}
+      {/* AUDIT READINESS BANNER (If participant has incomplete tests) */}
       {!activeData.isDemo && !userIsFullyComplete && (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 no-print">
-          <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 text-amber-900 dark:text-amber-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
               <div>
                 <h4 className="text-sm font-bold">
-                  Status de Prontidão da Tríade COMET ({analysis.completionStatus.completedCount} de 3 Concluídos)
+                  Síntese Integrada Pendente ({analysis.completionStatus.completedCount} de 3 instrumentos concluídos)
                 </h4>
-                <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                  Para gerar o relatório com 100% dos seus dados reais, complete os instrumentos pendentes. Ou clique ao lado para testar com um perfil demonstrativo completo.
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                  O Relatório Integrado P³ completo requer os resultados válidos dos três instrumentos. Conclua os testes pendentes abaixo:
                 </p>
 
-                {/* Progress Indicators */}
-                <div className="flex flex-wrap gap-2 mt-2">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    userHasAncoras
-                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                      : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                  }`}>
-                    {userHasAncoras ? '✓ Âncoras Concluído' : 'Pendente: Âncoras'}
-                  </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    userHasCabin
-                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                      : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                  }`}>
-                    {userHasCabin ? '✓ CABIN Concluído' : 'Pendente: CABIN'}
-                  </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    userHasRiasec
-                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                      : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                  }`}>
-                    {userHasRiasec ? '✓ RIASEC Concluído' : 'Pendente: RIASEC'}
-                  </span>
+                <div className="flex flex-wrap items-center gap-2 mt-3 text-xs">
+                  {onNavigateToModule && !userHasRiasec && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigateToModule('riasec')}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition cursor-pointer"
+                    >
+                      Realizar RIASEC
+                    </button>
+                  )}
+                  {onNavigateToModule && !userHasCabin && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigateToModule('cabin')}
+                      className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-semibold transition cursor-pointer"
+                    >
+                      Realizar CABIN
+                    </button>
+                  )}
+                  {onNavigateToModule && !userHasAncoras && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigateToModule('ancoras')}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition cursor-pointer"
+                    >
+                      Realizar Âncoras
+                    </button>
+                  )}
+                  {!onNavigateToModule && !hideDemoSwitcher && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveDemoId(INTEGRATED_DEMO_PROFILES[0].id);
+                        showToast('Carregado perfil demonstrativo completo para visualização');
+                      }}
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-md transition cursor-pointer"
+                    >
+                      Carregar Exemplo Completo
+                    </button>
+                  )}
                 </div>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveDemoId(INTEGRATED_DEMO_PROFILES[0].id);
-                  showToast('Carregado perfil demonstrativo completo para visualização');
-                }}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-md transition cursor-pointer"
-              >
-                Carregar Exemplo Completo
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ACTIVE DEMO NOTICE */}
-      {activeData.isDemo && (
+      {/* ACTIVE DEMO NOTICE (only when switcher is active) */}
+      {activeData.isDemo && !hideDemoSwitcher && (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 no-print">
           <div className="p-3 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-between text-xs text-teal-800 dark:text-teal-200">
             <div className="flex items-center gap-2">

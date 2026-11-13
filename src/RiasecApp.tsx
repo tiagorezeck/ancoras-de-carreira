@@ -54,7 +54,11 @@ import {
 interface RiasecAppProps {
   theme?: 'light' | 'dark';
   onBackToMain?: () => void;
+  onViewReports?: (tab?: 'riasec' | 'integrated') => void;
   initialScreen?: 'home' | 'quiz' | 'result';
+  externalAnswers?: TestAnswers;
+  reportOnly?: boolean;
+  participantName?: string;
   integratedInfo?: {
     currentStepNumber: number;
     totalSteps: number;
@@ -74,12 +78,16 @@ interface SavedRiasecState {
 export default function RiasecApp({
   theme = 'dark',
   onBackToMain,
+  onViewReports,
   initialScreen,
+  externalAnswers,
+  reportOnly = false,
+  participantName,
   integratedInfo,
 }: RiasecAppProps) {
-  const [screen, setScreen] = useState<RiasecScreen>(initialScreen || 'home');
+  const [screen, setScreen] = useState<RiasecScreen>(reportOnly ? 'result' : (initialScreen || 'home'));
   const [currentBlock, setCurrentBlock] = useState<number>(1);
-  const [answers, setAnswers] = useState<TestAnswers>({});
+  const [answers, setAnswers] = useState<TestAnswers>(externalAnswers || {});
   const [resultTab, setResultTab] = useState<ResultTab>('overview');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [activeDemoId, setActiveDemoId] = useState<string>('');
@@ -87,15 +95,27 @@ export default function RiasecApp({
   const [selectedDimensionModal, setSelectedDimensionModal] = useState<RiasecType | null>(null);
   const [confirmResetOpen, setConfirmResetOpen] = useState<boolean>(false);
 
-  // Sync initialScreen if changed by parent
+  // Sync initialScreen / reportOnly if changed by parent
   useEffect(() => {
+    if (reportOnly) {
+      setScreen('result');
+      return;
+    }
     if (initialScreen) {
       setScreen(initialScreen);
     }
-  }, [initialScreen]);
+  }, [initialScreen, reportOnly]);
 
-  // Restore saved state from localStorage
+  // Sync externalAnswers when provided
   useEffect(() => {
+    if (externalAnswers) {
+      setAnswers(externalAnswers);
+    }
+  }, [externalAnswers]);
+
+  // Restore saved state from localStorage (only when not in reportOnly mode)
+  useEffect(() => {
+    if (reportOnly || externalAnswers) return;
     try {
       const saved = localStorage.getItem(STORAGE_KEY_RIASEC);
       if (saved) {
@@ -110,11 +130,11 @@ export default function RiasecApp({
     } catch (e) {
       console.warn('Erro ao restaurar progresso RIASEC:', e);
     }
-  }, []);
+  }, [reportOnly, externalAnswers]);
 
-  // Save progress unless in demo mode
+  // Save progress unless in demo mode or reportOnly mode
   const persistProgress = (newAnswers: TestAnswers, blockNum: number) => {
-    if (isDemoMode) return;
+    if (isDemoMode || reportOnly || externalAnswers) return;
     try {
       const stateToSave: SavedRiasecState = {
         answers: newAnswers,
@@ -133,25 +153,27 @@ export default function RiasecApp({
     }, 3200);
   };
 
+  const activeAnswers = externalAnswers || answers;
+
   // Completed count (12 total blocks)
   const completedBlocksCount = useMemo(() => {
     let count = 0;
     for (let i = 1; i <= 12; i++) {
-      const b = answers[i];
+      const b = activeAnswers[i];
       if (b && b.first && b.second && b.third) {
         count++;
       }
     }
     return count;
-  }, [answers]);
+  }, [activeAnswers]);
 
   const isTestComplete = completedBlocksCount === 12;
 
   // Active result calculation
   const computedResult: RiasecResult | null = useMemo(() => {
     if (completedBlocksCount < 12 && !isDemoMode) return null;
-    return calculateRiasecResult(answers);
-  }, [answers, completedBlocksCount, isDemoMode]);
+    return calculateRiasecResult(activeAnswers);
+  }, [activeAnswers, completedBlocksCount, isDemoMode]);
 
   // Handlers for starting, resuming, or loading demo
   const handleStartTest = () => {
@@ -234,9 +256,13 @@ export default function RiasecApp({
     } else {
       // Completed all 12 blocks
       persistProgress(answers, 12);
-      setScreen('result');
-      setResultTab('overview');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (onViewReports) {
+        onViewReports('riasec');
+      } else {
+        setScreen('result');
+        setResultTab('overview');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
       showToast('Avaliação RIASEC concluída com sucesso!');
     }
   };
@@ -667,7 +693,7 @@ export default function RiasecApp({
 
       {/* SCREEN 2: QUIZ / TEST VIEW */}
       {screen === 'quiz' && (
-        <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-200">
+        <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-200">
           {/* Banner de Jornada Integrada se ativo */}
           {integratedInfo && (
             <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-500/15 via-purple-500/10 to-indigo-500/15 border border-indigo-500/30 flex flex-wrap items-center justify-between gap-3 shadow-sm">
@@ -816,7 +842,7 @@ export default function RiasecApp({
                           </div>
 
                           {/* 1st, 2nd, 3rd Selection Buttons */}
-                          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                          <div className="flex flex-wrap items-center gap-1.5 shrink-0 self-start sm:self-center">
                             <button
                               onClick={() => handleSelectRank(q.id, 'first')}
                               className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1 cursor-pointer ${
@@ -976,16 +1002,25 @@ export default function RiasecApp({
           >
             <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
               <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  Relatório Executivo Oficial • Assessment COMET
+                <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                  Relatório RIASEC {participantName ? `• ${participantName}` : '• Assessment COMET'}
                 </span>
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-slate-500 dark:text-slate-400">
                   {new Date(computedResult.completedAt).toLocaleDateString('pt-BR')}
                 </span>
               </div>
 
               {/* Action buttons */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 print:hidden">
+                {onViewReports && !reportOnly && (
+                  <button
+                    type="button"
+                    onClick={() => onViewReports('integrated')}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                  >
+                    <span>Ver Dossiê Integrado</span>
+                  </button>
+                )}
                 <button
                   onClick={() => window.print()}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition cursor-pointer ${
@@ -1016,41 +1051,43 @@ export default function RiasecApp({
                   <Share2 className="w-3.5 h-3.5" /> Compartilhar
                 </button>
 
-                <button
-                  onClick={() => setConfirmResetOpen(true)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition text-rose-400 hover:text-rose-300 cursor-pointer ${
-                    theme === 'dark'
-                      ? 'bg-slate-800 hover:bg-slate-700 border-slate-700'
-                      : 'bg-white hover:bg-slate-100 border-slate-200 shadow-xs'
-                  }`}
-                >
-                  <RotateCcw className="w-3.5 h-3.5" /> Refazer
-                </button>
+                {!reportOnly && (
+                  <button
+                    onClick={() => setConfirmResetOpen(true)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition text-rose-500 hover:text-rose-400 cursor-pointer ${
+                      theme === 'dark'
+                        ? 'bg-slate-800 hover:bg-slate-700 border-slate-700'
+                        : 'bg-white hover:bg-slate-100 border-slate-200 shadow-xs'
+                    }`}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Refazer
+                  </button>
+                )}
               </div>
             </div>
 
             {/* Holland Code Showcase */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
               <div className="lg:col-span-7">
-                <span className="text-xs uppercase font-extrabold tracking-widest text-indigo-400">
+                <span className="text-xs uppercase font-extrabold tracking-widest text-indigo-600 dark:text-indigo-400">
                   Seu Código Vocacional de Holland
                 </span>
                 <div className="mt-2 flex items-baseline gap-3">
-                  <h1 className="text-5xl sm:text-6xl font-black tracking-tight text-white drop-shadow-md">
+                  <h1 className={`text-5xl sm:text-6xl font-black tracking-tight drop-shadow-sm ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
                     {computedResult.hollandCode}
                   </h1>
-                  <span className="text-sm sm:text-base font-semibold text-slate-400">
+                  <span className="text-sm sm:text-base font-semibold text-slate-500 dark:text-slate-400">
                     Tríade de Orientação Ocupacional
                   </span>
                 </div>
 
                 <p className={`mt-4 text-sm sm:text-base leading-relaxed ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
                   Seu perfil vocacional combina predominantemente o foco{' '}
-                  <strong className="text-white">{PROFILES_DETAIL[computedResult.primaryType].name}</strong> (
+                  <strong className={theme === 'dark' ? 'text-white' : 'text-slate-900'}>{PROFILES_DETAIL[computedResult.primaryType].name}</strong> (
                   {computedResult.scores[computedResult.primaryType].points} pts), seguido por{' '}
-                  <strong className="text-white">{PROFILES_DETAIL[computedResult.secondaryType].name}</strong> (
+                  <strong className={theme === 'dark' ? 'text-white' : 'text-slate-900'}>{PROFILES_DETAIL[computedResult.secondaryType].name}</strong> (
                   {computedResult.scores[computedResult.secondaryType].points} pts) e{' '}
-                  <strong className="text-white">{PROFILES_DETAIL[computedResult.tertiaryType].name}</strong> (
+                  <strong className={theme === 'dark' ? 'text-white' : 'text-slate-900'}>{PROFILES_DETAIL[computedResult.tertiaryType].name}</strong> (
                   {computedResult.scores[computedResult.tertiaryType].points} pts).
                 </p>
 
@@ -1587,7 +1624,7 @@ export default function RiasecApp({
                   </thead>
                   <tbody className="divide-y divide-slate-800/40">
                     {DEFAULT_BLOCKS.map((b) => {
-                      const ans = answers[b.blockNumber];
+                      const ans = activeAnswers[b.blockNumber];
                       const q1 = b.questions.find((q) => q.id === ans?.first);
                       const q2 = b.questions.find((q) => q.id === ans?.second);
                       const q3 = b.questions.find((q) => q.id === ans?.third);

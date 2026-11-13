@@ -55,12 +55,18 @@ import {
   CheckSquare,
   Square,
   Clock,
+  History,
+  User,
 } from 'lucide-react';
 import CabinApp from './CabinApp';
 import RiasecApp from './RiasecApp';
 import IntegratedReportApp from './IntegratedReportApp';
+import P3HomeGuide from './P3HomeGuide';
+import { INTEGRATED_DEMO_PROFILES } from './integratedReportEngine';
+import { TestAnswers as RiasecAnswers } from './riasecData';
 
 const STORAGE_KEY = 'ancora-carreira-progress-v1';
+const ANCORAS_COMPLETED_STORAGE_KEY = 'comet_ancoras_completed_v1';
 const THEME_STORAGE_KEY = 'ancora-carreira-theme';
 const TOTAL_QUESTIONS = QUESTIONS.length;
 const BLOCK_SIZE = 4;
@@ -187,9 +193,20 @@ function AnchorIcon({
 export default function App() {
   type Screen = 'home' | 'quiz' | 'bonus' | 'result';
   type ResultTab = 'overview' | 'anchors' | 'synergy' | 'audit';
+  type ActiveView = 'home' | 'assessment' | 'history';
+  type AssessmentModule = 'riasec' | 'cabin' | 'ancoras';
+  type HistoryReportTab = 'integrated' | 'riasec' | 'cabin' | 'ancoras';
 
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  const [activeModule, setActiveModule] = useState<'ancoras' | 'cabin' | 'riasec' | 'integrated'>('ancoras');
+  const [activeView, setActiveView] = useState<ActiveView>('home');
+  const [activeAssessment, setActiveAssessment] = useState<AssessmentModule>('riasec');
+  const [selectedHistoryPersonId, setSelectedHistoryPersonId] = useState<string | null>(null);
+  const [historyReportTab, setHistoryReportTab] = useState<HistoryReportTab>('integrated');
+  const [completedAncoras, setCompletedAncoras] = useState<{
+    ratings: Record<number, number>;
+    bonus: number[];
+    completedAt: string;
+  } | null>(null);
 
   // Helpers to read CABIN and RIASEC progress from localStorage safely
   const getCabinAnswersFromStorage = (): Record<number, number> => {
@@ -205,7 +222,7 @@ export default function App() {
     return {};
   };
 
-  const getRiasecAnswersFromStorage = (): any => {
+  const getRiasecAnswersFromStorage = (): RiasecAnswers => {
     try {
       const raw = localStorage.getItem('comet_riasec_v1');
       if (raw) {
@@ -227,7 +244,6 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [activeDemoId, setActiveDemoId] = useState<string>(SAMPLE_PROFILES[0].id);
-  const [categoryHubExpanded, setCategoryHubExpanded] = useState<boolean>(true);
   const [tutorialFilter, setTutorialFilter] = useState<'all' | 'top' | AnchorLetter>('all');
   const [expandedTutorialLetters, setExpandedTutorialLetters] = useState<Record<string, boolean>>({
     A: true,
@@ -258,7 +274,7 @@ export default function App() {
   // Evaluation launcher & journey states
   const [isStartTestModalOpen, setIsStartTestModalOpen] = useState<boolean>(false);
   const [testModeSelection, setTestModeSelection] = useState<'integrated' | 'individual'>('integrated');
-  const [selectedIndividualTest, setSelectedIndividualTest] = useState<'ancoras' | 'cabin' | 'riasec'>('ancoras');
+  const [selectedIndividualTest, setSelectedIndividualTest] = useState<'ancoras' | 'cabin' | 'riasec'>('riasec');
   const [selectedIntegratedModules, setSelectedIntegratedModules] = useState<{
     ancoras: boolean;
     cabin: boolean;
@@ -277,7 +293,7 @@ export default function App() {
 
   const [integratedJourney, setIntegratedJourney] = useState<IntegratedJourneyState>({
     active: false,
-    queue: ['ancoras', 'cabin', 'riasec'],
+    queue: ['riasec', 'cabin', 'ancoras'],
     currentIndex: 0,
   });
 
@@ -286,12 +302,12 @@ export default function App() {
 
   const getModuleName = (mod: 'ancoras' | 'cabin' | 'riasec'): string => {
     switch (mod) {
-      case 'ancoras':
-        return '1. Âncoras de Carreira (Valores)';
-      case 'cabin':
-        return '2. CABIN Interesses Básicos (Atividades)';
       case 'riasec':
-        return '3. RIASEC Holland (Ambientes)';
+        return '1. RIASEC Holland (Descoberta)';
+      case 'cabin':
+        return '2. CABIN Interesses Básicos (Exploração)';
+      case 'ancoras':
+        return '3. Âncoras de Carreira (Direcionamento)';
     }
   };
 
@@ -308,17 +324,26 @@ export default function App() {
   const handleStartIndividualTest = (mod: 'ancoras' | 'cabin' | 'riasec') => {
     setIntegratedJourney({ active: false, queue: [], currentIndex: 0 });
     setIsStartTestModalOpen(false);
+    setActiveView('assessment');
+    setActiveAssessment(mod);
 
     if (mod === 'ancoras') {
-      setActiveModule('ancoras');
-      if (screen !== 'quiz') {
+      setIsDemoMode(false);
+      if (savedProgress && isValidProgress(savedProgress)) {
+        const clampedIndex = clampBlockIndex(savedProgress.blockIndex);
+        setRatings({ ...savedProgress.ratings });
+        setBonus([...savedProgress.bonus]);
+        setBlockIndex(clampedIndex);
+        setScreen(clampedIndex >= TOTAL_BLOCKS ? 'bonus' : 'quiz');
+      } else {
+        setBlockIndex(0);
+        setRatings({});
+        setBonus([]);
         setScreen('quiz');
       }
     } else if (mod === 'cabin') {
-      setActiveModule('cabin');
       setCabinInitialStep('test');
     } else if (mod === 'riasec') {
-      setActiveModule('riasec');
       setRiasecInitialScreen('quiz');
     }
 
@@ -329,11 +354,11 @@ export default function App() {
   // Handler to start the integrated journey
   const handleStartIntegratedJourney = () => {
     const queue: ('ancoras' | 'cabin' | 'riasec')[] = [];
-    if (selectedIntegratedModules.ancoras) queue.push('ancoras');
-    if (selectedIntegratedModules.cabin) queue.push('cabin');
     if (selectedIntegratedModules.riasec) queue.push('riasec');
+    if (selectedIntegratedModules.cabin) queue.push('cabin');
+    if (selectedIntegratedModules.ancoras) queue.push('ancoras');
 
-    const finalQueue = queue.length > 0 ? queue : (['ancoras', 'cabin', 'riasec'] as const);
+    const finalQueue = queue.length > 0 ? queue : (['riasec', 'cabin', 'ancoras'] as const);
     const first = finalQueue[0];
 
     setIntegratedJourney({
@@ -342,20 +367,20 @@ export default function App() {
       currentIndex: 0,
     });
     setIsStartTestModalOpen(false);
+    setActiveView('assessment');
+    setActiveAssessment(first);
 
     if (first === 'ancoras') {
-      setActiveModule('ancoras');
+      setIsDemoMode(false);
       setScreen('quiz');
     } else if (first === 'cabin') {
-      setActiveModule('cabin');
       setCabinInitialStep('test');
     } else if (first === 'riasec') {
-      setActiveModule('riasec');
       setRiasecInitialScreen('quiz');
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast(`Iniciando Jornada Integrada COMET — Etapa 1 de ${finalQueue.length}: ${getModuleName(first)}`);
+    showToast(`Iniciando Jornada Integrada P³ — Etapa 1 de ${finalQueue.length}: ${getModuleName(first)}`);
   };
 
   // Handler to advance to the next test in the integrated journey
@@ -367,15 +392,15 @@ export default function App() {
         ...prev,
         currentIndex: nextIndex,
       }));
+      setActiveView('assessment');
+      setActiveAssessment(nextMod);
 
       if (nextMod === 'ancoras') {
-        setActiveModule('ancoras');
+        setIsDemoMode(false);
         setScreen('quiz');
       } else if (nextMod === 'cabin') {
-        setActiveModule('cabin');
         setCabinInitialStep('test');
       } else if (nextMod === 'riasec') {
-        setActiveModule('riasec');
         setRiasecInitialScreen('quiz');
       }
 
@@ -383,99 +408,84 @@ export default function App() {
       showToast(`Avançando para Etapa ${nextIndex + 1} de ${integratedJourney.queue.length}: ${getModuleName(nextMod)}`);
     } else {
       setIntegratedJourney((prev) => ({ ...prev, active: false }));
-      showToast('🎉 Parabéns! Você concluiu todos os testes da sua Jornada Integrada! Abrindo Dossiê Integrado...');
-      setActiveModule('integrated');
+      showToast('Avaliação P³ concluída! Abrindo seu relatório no Histórico.');
+      setActiveView('history');
+      setSelectedHistoryPersonId('self');
+      setHistoryReportTab('integrated');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
-  // Status summaries for the Thematic Category Hub (Perfil Profissional)
+  // Status summaries for current local participant
   const getModuleSummary = () => {
-    // 1. Âncoras de Carreira
-    const ancorasAnswered = Object.keys(ratings).length;
+    const liveRatings = !isDemoMode ? ratings : (savedProgress?.ratings || {});
+    const liveBonus = !isDemoMode ? bonus : (savedProgress?.bonus || []);
+
+    const activeAncorasRatings =
+      Object.keys(liveRatings).length >= 40 && liveBonus.length > 0
+        ? liveRatings
+        : completedAncoras?.ratings || liveRatings;
+    const activeAncorasBonus =
+      Object.keys(liveRatings).length >= 40 && liveBonus.length > 0
+        ? liveBonus
+        : completedAncoras?.bonus || liveBonus;
+
+    const ancorasAnswered = Object.keys(activeAncorasRatings).length;
+    const ancorasIsCompleted =
+      (ancorasAnswered >= 40 && activeAncorasBonus.length > 0) || Boolean(completedAncoras);
+
     let ancorasStatus = {
-      label: 'Disponível',
-      detail: '40 afirmações',
+      label: 'Pendente',
       isCompleted: false,
-      badgeClass: 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border-slate-500/20',
+      inProgress: false,
     };
-    if (screen === 'result' || (ancorasAnswered >= 40 && bonus.length > 0)) {
-      ancorasStatus = {
-        label: 'Relatório Pronto',
-        detail: '40/40 respondidas',
-        isCompleted: true,
-        badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-      };
+    if (ancorasIsCompleted) {
+      ancorasStatus = { label: 'Concluído', isCompleted: true, inProgress: false };
     } else if (ancorasAnswered > 0) {
-      ancorasStatus = {
-        label: `Em andamento (${ancorasAnswered}/40)`,
-        detail: `Bloco ${blockIndex + 1} de 10`,
-        isCompleted: false,
-        badgeClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
-      };
+      ancorasStatus = { label: `Em andamento (${ancorasAnswered}/40)`, isCompleted: false, inProgress: true };
     }
 
     // 2. CABIN
+    const cabinAnswers = getCabinAnswersFromStorage();
+    const cabinCount = Object.keys(cabinAnswers).length;
     let cabinStatus = {
-      label: 'Disponível',
-      detail: '164 atividades • 41 escalas',
+      label: 'Pendente',
       isCompleted: false,
-      badgeClass: 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border-slate-500/20',
+      inProgress: false,
     };
-    try {
-      const saved = localStorage.getItem('comet_cabin_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const count = Object.keys(parsed || {}).length;
-        if (count >= 164) {
-          cabinStatus = {
-            label: 'Relatório Pronto',
-            detail: '164/164 respondidas',
-            isCompleted: true,
-            badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-          };
-        } else if (count > 0) {
-          cabinStatus = {
-            label: `Em andamento (${count}/164)`,
-            detail: 'Salvo localmente',
-            isCompleted: false,
-            badgeClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
-          };
-        }
-      }
-    } catch (e) {}
+    if (cabinCount >= 164) {
+      cabinStatus = { label: 'Concluído', isCompleted: true, inProgress: false };
+    } else if (cabinCount > 0) {
+      cabinStatus = { label: `Em andamento (${cabinCount}/164)`, isCompleted: false, inProgress: true };
+    }
 
     // 3. RIASEC
+    const riasecAnswers = getRiasecAnswersFromStorage();
+    let riasecBlocks = 0;
+    for (let i = 1; i <= 12; i++) {
+      const b = riasecAnswers[i];
+      if (b && b.first && b.second && b.third) riasecBlocks++;
+    }
     let riasecStatus = {
-      label: 'Disponível',
-      detail: '12 blocos • 72 itens',
+      label: 'Pendente',
       isCompleted: false,
-      badgeClass: 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border-slate-500/20',
+      inProgress: false,
     };
-    try {
-      const saved = localStorage.getItem('comet_riasec_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const blocks = Object.keys(parsed.answers || {}).length;
-        if (blocks >= 12) {
-          riasecStatus = {
-            label: 'Relatório Pronto',
-            detail: '12/12 blocos concluídos',
-            isCompleted: true,
-            badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-          };
-        } else if (blocks > 0) {
-          riasecStatus = {
-            label: `Em andamento (${blocks}/12)`,
-            detail: 'Salvo localmente',
-            isCompleted: false,
-            badgeClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
-          };
-        }
-      }
-    } catch (e) {}
+    if (riasecBlocks >= 12) {
+      riasecStatus = { label: 'Concluído', isCompleted: true, inProgress: false };
+    } else if (riasecBlocks > 0) {
+      riasecStatus = { label: `Em andamento (${riasecBlocks}/12)`, isCompleted: false, inProgress: true };
+    }
 
-    return { ancoras: ancorasStatus, cabin: cabinStatus, riasec: riasecStatus };
+    return {
+      ancoras: ancorasStatus,
+      cabin: cabinStatus,
+      riasec: riasecStatus,
+      activeAncorasRatings,
+      activeAncorasBonus,
+      cabinAnswers,
+      riasecAnswers,
+    };
   };
 
   const [dialog, setDialog] = useState<{
@@ -518,11 +528,22 @@ export default function App() {
     document.documentElement.classList.toggle('dark', nextTheme === 'dark');
   };
 
-  // Check saved progress on initial load
+  // Check saved progress and completed Ancoras on initial load
   useEffect(() => {
     const saved = safeStorage.get();
     if (isValidProgress(saved)) {
       setSavedProgress(saved);
+    }
+    try {
+      const completedRaw = window.localStorage.getItem(ANCORAS_COMPLETED_STORAGE_KEY);
+      if (completedRaw) {
+        const parsed = JSON.parse(completedRaw);
+        if (parsed && parsed.ratings && Array.isArray(parsed.bonus)) {
+          setCompletedAncoras(parsed);
+        }
+      }
+    } catch {
+      // Ignore
     }
   }, []);
 
@@ -723,6 +744,17 @@ export default function App() {
       return;
     }
     if (!isDemoMode) {
+      const completedPayload = {
+        ratings: { ...ratings },
+        bonus: [...bonus],
+        completedAt: new Date().toISOString(),
+      };
+      setCompletedAncoras(completedPayload);
+      try {
+        window.localStorage.setItem(ANCORAS_COMPLETED_STORAGE_KEY, JSON.stringify(completedPayload));
+      } catch {
+        // Ignore
+      }
       safeStorage.clear();
       setSavedProgress(null);
     }
@@ -877,179 +909,56 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
         </div>
       )}
 
-      {/* TOP NAVBAR */}
-      <header className="sticky top-0 z-40 backdrop-blur-md border-b transition-colors duration-200 no-print"
+      {/* TOP NAVBAR — Minimal: Test Name · Histórico · Light/Dark Toggle */}
+      <header
+        className="sticky top-0 z-40 backdrop-blur-md border-b transition-colors duration-200 no-print"
         style={{
           backgroundColor:
-            theme === 'dark' ? 'rgba(11, 15, 25, 0.85)' : 'rgba(248, 250, 252, 0.88)',
+            theme === 'dark' ? 'rgba(11, 15, 25, 0.88)' : 'rgba(248, 250, 252, 0.92)',
           borderColor: 'var(--border-color)',
         }}
       >
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 sm:gap-6 min-w-0">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveView('home');
+              setSelectedHistoryPersonId(null);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="text-left focus:outline-none cursor-pointer group min-w-0"
+          >
+            <div className="font-bold text-sm sm:text-base tracking-tight text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
+              P³ — Perfil Profissional Potencial
+            </div>
+          </button>
+
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button
+              type="button"
               onClick={() => {
-                if (activeModule === 'ancoras' && screen !== 'home') {
-                  openResetDialog(() => {
-                    setIsDemoMode(false);
-                    setScreen('home');
-                  });
-                }
+                setActiveView('history');
+                setSelectedHistoryPersonId(null);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="flex items-center gap-2.5 text-left focus:outline-none group cursor-pointer shrink-0"
+              className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold border transition-colors cursor-pointer whitespace-nowrap ${
+                activeView === 'history'
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/70'
+              }`}
             >
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-sm transition-transform group-hover:scale-105"
-                style={{
-                  backgroundColor:
-                    activeModule === 'integrated'
-                      ? '#0f766e'
-                      : activeModule === 'cabin'
-                      ? '#14b8a6'
-                      : activeModule === 'riasec'
-                      ? '#6366f1'
-                      : 'var(--accent)',
-                }}
-              >
-                {activeModule === 'integrated' ? '📊' : activeModule === 'cabin' ? '🧭' : activeModule === 'riasec' ? '🎯' : '⚓'}
-              </div>
-              <div className="hidden min-[480px]:block">
-                <div className="font-semibold text-sm sm:text-base tracking-tight flex items-center gap-1.5">
-                  <span>
-                    {activeModule === 'integrated'
-                      ? 'Relatório Integrado'
-                      : activeModule === 'cabin'
-                      ? 'CABIN Interesses'
-                      : activeModule === 'riasec'
-                      ? 'RIASEC Holland'
-                      : 'Âncoras de Carreira'}
-                  </span>
-                  <span
-                    className={`text-[10px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-full border ${
-                      activeModule === 'integrated'
-                        ? 'border-indigo-500/40 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10'
-                        : activeModule === 'cabin'
-                        ? 'border-teal-500/30 text-teal-600 dark:text-teal-400 bg-teal-500/10'
-                        : activeModule === 'riasec'
-                        ? 'border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/10'
-                        : 'border-indigo-500/20 text-indigo-500 bg-indigo-500/10'
-                    }`}
-                  >
-                    {activeModule === 'integrated'
-                      ? 'COMET Tríade'
-                      : activeModule === 'cabin'
-                      ? 'Su et al.'
-                      : activeModule === 'riasec'
-                      ? 'John Holland'
-                      : 'Edgar Schein'}
-                  </span>
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {activeModule === 'integrated'
-                    ? 'Afinidades · Atividades · Valores & Direcionamento'
-                    : activeModule === 'cabin'
-                    ? '41 Interesses • 8 Dimensões SETPOINT'
-                    : activeModule === 'riasec'
-                    ? '12 Blocos • 72 Itens • Código Holland'
-                    : 'Inventário Psicométrico Profissional'}
-                </div>
-              </div>
+              <History className="w-4 h-4" />
+              <span>Histórico</span>
             </button>
 
-            {/* Alternador dos 4 Módulos da Área Mentalidade (Assessment COMET) */}
-            <div className="flex items-center p-1 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 border border-slate-300/60 dark:border-slate-700/60 shrink-0">
-              <button
-                type="button"
-                onClick={() => setActiveModule('ancoras')}
-                title="1. Âncoras de Carreira — Valores e Motivações Profissionais"
-                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  activeModule === 'ancoras'
-                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>⚓ 1. Âncoras</span>
-                <span className="hidden lg:inline text-[10px] font-normal opacity-75">(Valores)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveModule('cabin')}
-                title="2. CABIN — Interesses Básicos por Atividades"
-                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  activeModule === 'cabin'
-                    ? 'bg-teal-500 text-slate-950 font-black shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>🧭 2. CABIN</span>
-                <span className="hidden lg:inline text-[10px] font-normal opacity-85">(Atividades)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveModule('riasec')}
-                title="3. RIASEC — Categorias e Ambientes Vocacionais"
-                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  activeModule === 'riasec'
-                    ? 'bg-indigo-600 text-white font-black shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>🎯 3. RIASEC</span>
-                <span className="hidden lg:inline text-[10px] font-normal opacity-85">(Ambientes)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveModule('integrated')}
-                title="4. Relatório Integrado — Escolhas e Direcionamento de Carreira"
-                className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  activeModule === 'integrated'
-                    ? 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-teal-600 text-white font-black shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>📊 4. Integrado</span>
-                <span className="text-[9px] px-1 rounded font-black bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 hidden sm:inline">
-                  DOSSIÊ
-                </span>
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            {screen === 'quiz' && (
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border"
-                style={{
-                  backgroundColor: 'var(--bg-surface)',
-                  borderColor: 'var(--border-color)',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                <span>Bloco {blockIndex + 1}/10</span>
-                <span className="opacity-40">•</span>
-                <span>{Math.round((totalAnswered / TOTAL_QUESTIONS) * 100)}%</span>
-              </div>
-            )}
-
-            {/* Quick Demo Test Access from header */}
-            {screen === 'home' && (
-              <button
-                onClick={() => handleLoadDemo(SAMPLE_PROFILES[0].id)}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/40 transition-all cursor-pointer"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>Ver Exemplo Pronto</span>
-              </button>
-            )}
-
-            {/* Dark / Light Mode Toggle */}
             <button
+              type="button"
               onClick={toggleTheme}
               aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
               title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
-              className="p-2.5 rounded-xl border transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer"
+              className="p-2.5 rounded-xl border transition-colors cursor-pointer flex items-center justify-center border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/70"
               style={{
                 backgroundColor: 'var(--bg-surface)',
-                borderColor: 'var(--border-color)',
                 color: 'var(--text-secondary)',
               }}
             >
@@ -1059,422 +968,436 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                 <Moon className="w-4 h-4 text-indigo-600" />
               )}
             </button>
-
-            {/* Quick Restart if in Quiz */}
-            {(screen === 'quiz' || screen === 'bonus') && (
-              <button
-                onClick={() =>
-                  openResetDialog(() => {
-                    setBlockIndex(0);
-                    setRatings({});
-                    setBonus([]);
-                    safeStorage.clear();
-                    setSavedProgress(null);
-                    setScreen('home');
-                  })
-                }
-                title="Reiniciar avaliação"
-                className="p-2.5 rounded-xl border text-xs font-medium transition-all duration-200 hover:text-rose-500 hover:border-rose-300 dark:hover:border-rose-900 cursor-pointer"
-                style={{
-                  backgroundColor: 'var(--bg-surface)',
-                  borderColor: 'var(--border-color)',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            )}
           </div>
         </div>
       </header>
 
-      {/* ========================================================================= */}
-      {/* CATEGORIA TEMÁTICA: PERFIL PROFISSIONAL — ESCOLHAS E DIRECIONAMENTO DE CARREIRA */}
-      {/* ========================================================================= */}
-      <section
-        className="border-b transition-colors duration-200 no-print"
-        style={{
-          backgroundColor:
-            theme === 'dark' ? 'rgba(15, 23, 42, 0.75)' : 'rgba(241, 245, 249, 0.85)',
-          borderColor: 'var(--border-color)',
-        }}
-      >
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5">
-          {/* Top Breadcrumb & Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-            <div className="flex items-center gap-2 text-xs font-semibold tracking-wide flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                ASSESSMENT COMET
-              </span>
-              <span className="text-slate-400 dark:text-slate-600">/</span>
-              <span className="px-2.5 py-0.5 rounded-full bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                ÁREA MENTALIDADE
-              </span>
-              <span className="text-slate-400 dark:text-slate-600">/</span>
-              <span className="text-indigo-600 dark:text-indigo-400 font-bold uppercase text-[11px]">
-                CATEGORIA TEMÁTICA
-              </span>
-            </div>
+      {/* ===================== VIEW 1: PÁGINA INICIAL ===================== */}
+      {activeView === 'home' && (() => {
+        const summary = getModuleSummary();
+        const completedCount =
+          (summary.riasec.isCompleted ? 1 : 0) +
+          (summary.cabin.isCompleted ? 1 : 0) +
+          (summary.ancoras.isCompleted ? 1 : 0);
+        const hasAnyProgress =
+          completedCount > 0 ||
+          summary.riasec.inProgress ||
+          summary.cabin.inProgress ||
+          summary.ancoras.inProgress;
 
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>3 Instrumentos Independentes</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setCategoryHubExpanded(!categoryHubExpanded)}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800 transition cursor-pointer"
-                title={categoryHubExpanded ? 'Recolher detalhes da categoria' : 'Expandir os 3 instrumentos'}
-              >
-                <span>{categoryHubExpanded ? 'Recolher Painel' : 'Ver os 3 Instrumentos'}</span>
-                {categoryHubExpanded ? (
-                  <ChevronUp className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                )}
-              </button>
-            </div>
-          </div>
+        return (
+          <P3HomeGuide
+            theme={theme}
+            summary={{
+              riasec: summary.riasec,
+              cabin: summary.cabin,
+              ancoras: summary.ancoras,
+            }}
+            completedCount={completedCount}
+            hasAnyProgress={hasAnyProgress}
+            onOpenStartModal={() => setIsStartTestModalOpen(true)}
+            onStartIndividualTest={(mod) => handleStartIndividualTest(mod)}
+            onOpenSelfHistory={() => {
+              setActiveView('history');
+              setSelectedHistoryPersonId('self');
+              setHistoryReportTab('integrated');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        );
+      })()}
 
-          {/* Heading and Clarifying Summary */}
-          <div className="mb-3.5">
-            <h1 className="text-lg sm:text-2xl lg:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-              PERFIL PROFISSIONAL
-              <span className="block sm:inline sm:ml-2 text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-teal-500 to-indigo-400">
-                — Escolhas e Direcionamento de Carreira
-              </span>
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 max-w-3xl leading-relaxed">
-              Agrupamento por afinidade temática e finalidade de aplicação. Três instrumentos psicométricos consagrados que investigam diferentes facetas da decisão de carreira — mantendo questionários, cálculos e relatórios 100% autônomos.
-            </p>
-          </div>
+      {/* ===================== VIEW 2: HISTÓRICO ===================== */}
+      {activeView === 'history' && (() => {
+        const summary = getModuleSummary();
+        const selfCompletedCount =
+          (summary.riasec.isCompleted ? 1 : 0) +
+          (summary.cabin.isCompleted ? 1 : 0) +
+          (summary.ancoras.isCompleted ? 1 : 0);
 
-          {/* Expanded 3-Card Grid */}
-          {categoryHubExpanded ? (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              {/* BOTÃO PRINCIPAL DE REALIZAR TESTE (INDIVIDUAL OU INTEGRADO) — ACIMA DOS CARDS */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-indigo-500/15 via-teal-500/10 to-indigo-500/15 border-2 border-indigo-500/30 dark:border-indigo-500/25 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-start sm:items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 to-teal-500 text-white flex items-center justify-center font-bold text-xl shadow-md shrink-0">
-                    ⚡
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                        Realizar Avaliação Profissional
-                      </h2>
-                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-indigo-600 text-white shadow-xs uppercase tracking-wide">
-                        Individual ou Integrado
-                      </span>
-                    </div>
-                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
-                      Clique no botão para escolher se prefere realizar um <strong>teste individual</strong> (1 instrumento) ou a <strong>jornada integrada</strong> (os 3 testes em sequência guiada).
-                    </p>
-                  </div>
-                </div>
+        const demoDates: Record<string, string> = {
+          demo_tech_architect: '15/10/2026',
+          demo_health_people: '28/10/2026',
+          demo_entrepreneur_lead: '02/11/2026',
+        };
 
-                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveModule('integrated');
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
+        const people = [
+          {
+            id: 'self',
+            name: 'Sua Avaliação Atual',
+            role: 'Participante local',
+            date: new Date().toLocaleDateString('pt-BR'),
+            summary: 'Resultados registrados neste dispositivo.',
+            isExample: false,
+            completedCount: selfCompletedCount,
+            riasecCompleted: summary.riasec.isCompleted,
+            cabinCompleted: summary.cabin.isCompleted,
+            ancorasCompleted: summary.ancoras.isCompleted,
+            riasecAnswers: summary.riasecAnswers,
+            cabinAnswers: summary.cabinAnswers,
+            ancorasRatings: summary.activeAncorasRatings,
+            ancorasBonus: summary.activeAncorasBonus,
+          },
+          ...INTEGRATED_DEMO_PROFILES.map((demo) => ({
+            id: demo.id,
+            name: demo.name,
+            role: demo.role,
+            date: demoDates[demo.id] || '01/11/2026',
+            summary: demo.summary,
+            isExample: true,
+            completedCount: 3,
+            riasecCompleted: true,
+            cabinCompleted: true,
+            ancorasCompleted: true,
+            riasecAnswers: demo.riasecAnswers,
+            cabinAnswers: demo.cabinAnswers,
+            ancorasRatings: demo.ancorasRatings,
+            ancorasBonus: demo.ancorasBonus,
+          })),
+        ];
+
+        const selectedPerson = selectedHistoryPersonId
+          ? people.find((p) => p.id === selectedHistoryPersonId) || null
+          : null;
+
+        // LIST OF PARTICIPANTS
+        if (!selectedPerson) {
+          return (
+            <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-8 animate-in fade-in duration-200">
+              <div className="space-y-1.5 border-b border-slate-200 dark:border-slate-800 pb-6">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+                  Histórico de Avaliações
+                </h1>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Selecione uma pessoa para abrir exclusivamente os relatórios dela (Resumo Integrado, RIASEC, CABIN e Âncoras).
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {people.map((person) => (
+                  <div
+                    key={person.id}
+                    className="p-6 rounded-2xl border flex flex-col justify-between gap-5 transition-colors hover:border-indigo-500/50"
+                    style={{
+                      backgroundColor: 'var(--bg-surface)',
+                      borderColor: 'var(--border-color)',
                     }}
-                    className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl border font-bold text-xs sm:text-sm transition-all duration-200 cursor-pointer ${
-                      activeModule === 'integrated'
-                        ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-500/20'
-                        : 'bg-white/80 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                    }`}
                   >
-                    <BookOpen className="w-4 h-4 text-indigo-500" />
-                    <span>Relatório Integrado</span>
-                  </button>
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                          {person.isExample ? 'Exemplo concluído' : 'Avaliação pessoal'} · {person.completedCount}/3 testes
+                        </span>
+                        <span className="font-mono tabular-nums">{person.date}</span>
+                      </div>
+
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <User className="w-4 h-4 text-slate-400 shrink-0" />
+                          <span>{person.name}</span>
+                        </h2>
+                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">
+                          {person.role}
+                        </p>
+                      </div>
+
+                      <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        {person.summary}
+                      </p>
+
+                      <div className="text-xs text-slate-500 dark:text-slate-400 pt-1 font-mono">
+                        RIASEC: {person.riasecCompleted ? '✓' : '—'} · CABIN: {person.cabinCompleted ? '✓' : '—'} · Âncoras: {person.ancorasCompleted ? '✓' : '—'}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedHistoryPersonId(person.id);
+                        setHistoryReportTab('integrated');
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>Abrir Relatório</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </main>
+          );
+        }
+
+        // SELECTED PERSON'S EXCLUSIVE REPORT VIEW (4 TABS)
+        return (
+          <div className="animate-in fade-in duration-200">
+            {/* Person Header & 4 Report Tabs */}
+            <div
+              className="border-b no-print"
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                borderColor: 'var(--border-color)',
+              }}
+            >
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-5 pb-0 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedHistoryPersonId(null);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Voltar ao Histórico</span>
+                    </button>
+
+                    <div className="min-w-0">
+                      <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+                        {selectedPerson.name}
+                      </h1>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                        {selectedPerson.role} · {selectedPerson.date}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4 Abas Exclusivas do Relatório da Pessoa */}
+                <nav className="flex items-center gap-2 overflow-x-auto no-scrollbar -mb-px">
+                  {(
+                    [
+                      { id: 'integrated', label: 'Resumo dos 3 e Interrelações' },
+                      { id: 'riasec', label: 'RIASEC Completo' },
+                      { id: 'cabin', label: 'CABIN Completo' },
+                      { id: 'ancoras', label: 'Âncoras Completo' },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        setHistoryReportTab(tab.id);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className={`px-4 py-3 text-xs sm:text-sm font-semibold whitespace-nowrap border-b-2 transition-colors cursor-pointer ${
+                        historyReportTab === tab.id
+                          ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                          : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+            </div>
+
+            {/* Tab Content for Selected Person */}
+            {historyReportTab === 'integrated' && (
+              <IntegratedReportApp
+                theme={theme}
+                ancorasRatings={selectedPerson.ancorasRatings}
+                ancorasBonus={selectedPerson.ancorasBonus}
+                cabinAnswers={selectedPerson.cabinAnswers}
+                riasecAnswers={selectedPerson.riasecAnswers}
+                participantName={selectedPerson.name}
+                participantRole={selectedPerson.role}
+                participantDate={selectedPerson.date}
+                hideDemoSwitcher={true}
+                onNavigateToModule={
+                  !selectedPerson.isExample
+                    ? (mod) => handleStartIndividualTest(mod)
+                    : undefined
+                }
+              />
+            )}
+
+            {historyReportTab === 'riasec' && (
+              <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+                {selectedPerson.riasecCompleted ? (
+                  <RiasecApp
+                    theme={theme}
+                    externalAnswers={selectedPerson.riasecAnswers}
+                    reportOnly={true}
+                    participantName={selectedPerson.name}
+                  />
+                ) : (
+                  <div className="max-w-xl mx-auto my-12 p-8 rounded-2xl border text-center space-y-4" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)' }}>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                      Relatório RIASEC não concluído
+                    </h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      Complete os 12 blocos do instrumento RIASEC para gerar este relatório completo.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleStartIndividualTest('riasec')}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors cursor-pointer"
+                    >
+                      <Play className="w-4 h-4 fill-current" />
+                      <span>Realizar Teste RIASEC</span>
+                    </button>
+                  </div>
+                )}
+              </main>
+            )}
+
+            {historyReportTab === 'cabin' && (
+              <div>
+                {selectedPerson.cabinCompleted ? (
+                  <CabinApp
+                    externalAnswers={selectedPerson.cabinAnswers}
+                    reportOnly={true}
+                    participantName={selectedPerson.name}
+                  />
+                ) : (
+                  <div className="max-w-xl mx-auto my-16 px-4">
+                    <div className="p-8 rounded-2xl border text-center space-y-4" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)' }}>
+                      <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                        Relatório CABIN não concluído
+                      </h2>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Complete as 164 atividades do instrumento CABIN para gerar este relatório completo.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleStartIndividualTest('cabin')}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-sm font-semibold transition-colors cursor-pointer"
+                      >
+                        <Play className="w-4 h-4 fill-current" />
+                        <span>Realizar Teste CABIN</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {historyReportTab === 'ancoras' && !selectedPerson.ancorasCompleted && (
+              <div className="max-w-xl mx-auto my-16 px-4">
+                <div className="p-8 rounded-2xl border text-center space-y-4" style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)' }}>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                    Relatório Âncoras de Carreira não concluído
+                  </h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Complete as 40 afirmações e a escolha de bônus das Âncoras de Carreira para gerar este relatório completo.
+                  </p>
                   <button
                     type="button"
-                    onClick={() => setIsStartTestModalOpen(true)}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-teal-600 hover:from-indigo-500 hover:to-teal-500 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all duration-200 cursor-pointer active:scale-95 group"
+                    onClick={() => handleStartIndividualTest('ancoras')}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors cursor-pointer"
                   >
-                    <Play className="w-4 h-4 fill-current group-hover:scale-110 transition-transform" />
-                    <span>Realizar Teste / Iniciar Avaliação</span>
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>Realizar Teste Âncoras</span>
                   </button>
                 </div>
               </div>
+            )}
+          </div>
+        );
+      })()}
 
-              {/* GRID COM OS 3 CARDS EXPLICATIVOS DE CADA ÁREA */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-                {/* CARD 1: ÂNCORAS */}
-                {(() => {
-                  const summary = getModuleSummary();
-                  const isCur = activeModule === 'ancoras';
-                  return (
-                    <div
-                      onClick={() => {
-                        setActiveModule('ancoras');
-                        setScreen('home');
-                      }}
-                      className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer relative group flex flex-col justify-between ${
-                        isCur
-                          ? 'bg-indigo-500/10 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md'
-                          : 'bg-white/70 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-indigo-400/50'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-600 text-white font-bold text-sm shadow-xs">
-                              ⚓
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 block">
-                                Edgar Schein • MIT
-                              </span>
-                              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight">
-                                1. Âncoras de Carreira
-                              </h3>
-                            </div>
-                          </div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${summary.ancoras.badgeClass}`}>
-                            {summary.ancoras.label}
-                          </span>
-                        </div>
+      {/* ===================== VIEW 3: REALIZAÇÃO DO TESTE (ASSESSMENT) ===================== */}
+      {activeView === 'assessment' && (
+        <div>
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-5 flex items-center justify-between gap-4 no-print">
+            <button
+              type="button"
+              onClick={() => {
+                setIntegratedJourney({ active: false, queue: [], currentIndex: 0 });
+                setActiveView('home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Voltar ao Início</span>
+            </button>
 
-                        <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-1">
-                          Foco: Valores e Motivações Profissionais
-                        </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
-                          Identifica aquilo que você jamais abriria mão em um momento de escolha de carreira (autonomia, segurança, desafio, etc.).
-                        </p>
-                      </div>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              {getModuleName(activeAssessment)}
+            </span>
+          </div>
 
-                      <div className="pt-2.5 border-t border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between text-[11px]">
-                        <span className="text-slate-500 dark:text-slate-400">
-                          40 afirmações • 8 âncoras
-                        </span>
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                          {isCur ? 'Ver Explicação' : 'Acessar Âncoras'} →
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
+          {activeAssessment === 'cabin' && (
+            <CabinApp
+              onBackToMain={() => {
+                setActiveView('home');
+              }}
+              onViewReports={() => {
+                if (integratedJourney.active) {
+                  handleAdvanceIntegratedJourney();
+                } else {
+                  setActiveView('history');
+                  setSelectedHistoryPersonId('self');
+                  setHistoryReportTab('cabin');
+                }
+              }}
+              initialStep={cabinInitialStep}
+              integratedInfo={
+                integratedJourney.active &&
+                integratedJourney.queue[integratedJourney.currentIndex] === 'cabin'
+                  ? {
+                      currentStepNumber: integratedJourney.currentIndex + 1,
+                      totalSteps: integratedJourney.queue.length,
+                      nextModuleName: getNextModuleName(),
+                      onProceedNext: handleAdvanceIntegratedJourney,
+                    }
+                  : undefined
+              }
+            />
+          )}
 
-                {/* CARD 2: CABIN */}
-                {(() => {
-                  const summary = getModuleSummary();
-                  const isCur = activeModule === 'cabin';
-                  return (
-                    <div
-                      onClick={() => {
-                        setActiveModule('cabin');
-                        setCabinInitialStep('intro');
-                      }}
-                      className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer relative group flex flex-col justify-between ${
-                        isCur
-                          ? 'bg-teal-500/10 border-teal-500 ring-2 ring-teal-500/20 shadow-md'
-                          : 'bg-white/70 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-teal-400/50'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-teal-500 text-slate-950 font-bold text-sm shadow-xs">
-                              🧭
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400 block">
-                                Su et al. (2019)
-                              </span>
-                              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight">
-                                2. CABIN Interesses
-                              </h3>
-                            </div>
-                          </div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${summary.cabin.badgeClass}`}>
-                            {summary.cabin.label}
-                          </span>
-                        </div>
-
-                        <div className="text-xs font-semibold text-teal-600 dark:text-teal-400 mb-1">
-                          Foco: Interesses Básicos por Atividades
-                        </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
-                          Mapeia sua atração prática por tarefas e rotinas do mundo real em 41 áreas ocupacionais e 8 dimensões SETPOINT.
-                        </p>
-                      </div>
-
-                      <div className="pt-2.5 border-t border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between text-[11px]">
-                        <span className="text-slate-500 dark:text-slate-400">
-                          164 atividades • 41 escalas • 8 SETPOINT
-                        </span>
-                        <span className="font-bold text-teal-600 dark:text-teal-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                          {isCur ? 'Ver Explicação' : 'Acessar CABIN'} →
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* CARD 3: RIASEC */}
-                {(() => {
-                  const summary = getModuleSummary();
-                  const isCur = activeModule === 'riasec';
-                  return (
-                    <div
-                      onClick={() => {
-                        setActiveModule('riasec');
-                        setRiasecInitialScreen('home');
-                      }}
-                      className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer relative group flex flex-col justify-between ${
-                        isCur
-                          ? 'bg-indigo-600/10 border-indigo-600 ring-2 ring-indigo-600/20 shadow-md'
-                          : 'bg-white/70 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-indigo-400/50'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-600 text-white font-bold text-sm shadow-xs">
-                              🎯
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 block">
-                                John Holland
-                              </span>
-                              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight">
-                                3. RIASEC Holland
-                              </h3>
-                            </div>
-                          </div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${summary.riasec.badgeClass}`}>
-                            {summary.riasec.label}
-                          </span>
-                        </div>
-
-                        <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-1">
-                          Foco: Categorias e Ambientes Vocacionais
-                        </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
-                          Avalia seus tipos vocacionais predominantes, a afinidade com ambientes organizacionais e o Código Holland de 3 letras.
-                        </p>
-                      </div>
-
-                      <div className="pt-2.5 border-t border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between text-[11px]">
-                        <span className="text-slate-500 dark:text-slate-400">
-                          12 blocos • 72 itens • 6 dimensões
-                        </span>
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                          {isCur ? 'Ver Explicação' : 'Acessar RIASEC'} →
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Notice of Strict Psychometric Independence */}
-              <div className="p-3.5 rounded-xl text-xs bg-slate-200/60 dark:bg-slate-800/40 border border-slate-300/60 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 flex items-start gap-2.5">
-                <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="text-slate-900 dark:text-slate-100">
-                    Diretriz de Independência Psicométrica:
-                  </strong>{' '}
-                  O agrupamento nesta categoria temática ocorre exclusivamente por afinidade e finalidade de aplicação.
-                  Cada instrumento mede aspectos diferentes e preserva integralmente sua identidade metodológica:
-                  três questionários independentes, três algoritmos de cálculo individuais e três relatórios separados. Não há pontuação combinada, classificação conjunta ou resultado único.
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* Compact active module bar when collapsed */
-            <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/50 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 text-xs">
-              <div className="flex items-center gap-2 truncate">
-                <span className="text-slate-500 dark:text-slate-400">Instrumento em foco:</span>
-                <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                  {activeModule === 'ancoras'
-                    ? '1. Âncoras de Carreira (Valores e Motivações)'
-                    : activeModule === 'cabin'
-                    ? '2. CABIN (Interesses Básicos por Atividades)'
-                    : activeModule === 'riasec'
-                    ? '3. RIASEC (Ambientes e Tipologias Vocacionais)'
-                    : '4. Relatório Integrado (Dossiê Estratégico)'}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCategoryHubExpanded(true)}
-                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer shrink-0 ml-2"
-              >
-                <span>Expandir os 3 Instrumentos</span>
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-            </div>
+          {activeAssessment === 'riasec' && (
+            <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+              <RiasecApp
+                theme={theme}
+                onBackToMain={() => {
+                  setActiveView('home');
+                }}
+                onViewReports={() => {
+                  if (integratedJourney.active) {
+                    handleAdvanceIntegratedJourney();
+                  } else {
+                    setActiveView('history');
+                    setSelectedHistoryPersonId('self');
+                    setHistoryReportTab('riasec');
+                  }
+                }}
+                initialScreen={riasecInitialScreen}
+                integratedInfo={
+                  integratedJourney.active &&
+                  integratedJourney.queue[integratedJourney.currentIndex] === 'riasec'
+                    ? {
+                        currentStepNumber: integratedJourney.currentIndex + 1,
+                        totalSteps: integratedJourney.queue.length,
+                        nextModuleName: getNextModuleName(),
+                        onProceedNext: handleAdvanceIntegratedJourney,
+                      }
+                    : undefined
+                }
+              />
+            </main>
           )}
         </div>
-      </section>
+      )}
 
-      {/* MAIN CONTAINER */}
-      {activeModule === 'integrated' ? (
-        <IntegratedReportApp
-          theme={theme}
-          onBackToMain={() => {
-            setActiveModule('ancoras');
-            setScreen('home');
-          }}
-          ancorasRatings={ratings}
-          ancorasBonus={bonus}
-          cabinAnswers={getCabinAnswersFromStorage()}
-          riasecAnswers={getRiasecAnswersFromStorage()}
-          onNavigateToModule={(mod) => {
-            setActiveModule(mod);
-            if (mod === 'ancoras') setScreen('home');
-          }}
-        />
-      ) : activeModule === 'cabin' ? (
-        <CabinApp
-          onBackToMain={() => {
-            setActiveModule('ancoras');
-            setScreen('home');
-          }}
-          initialStep={cabinInitialStep}
-          integratedInfo={
-            integratedJourney.active &&
-            integratedJourney.queue[integratedJourney.currentIndex] === 'cabin'
-              ? {
-                  currentStepNumber: integratedJourney.currentIndex + 1,
-                  totalSteps: integratedJourney.queue.length,
-                  nextModuleName: getNextModuleName(),
-                  onProceedNext: handleAdvanceIntegratedJourney,
-                }
-              : undefined
-          }
-        />
-      ) : activeModule === 'riasec' ? (
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-          <RiasecApp
-            theme={theme}
-            onBackToMain={() => {
-              setActiveModule('ancoras');
-              setScreen('home');
-            }}
-            initialScreen={riasecInitialScreen}
-            integratedInfo={
-              integratedJourney.active &&
-              integratedJourney.queue[integratedJourney.currentIndex] === 'riasec'
-                ? {
-                    currentStepNumber: integratedJourney.currentIndex + 1,
-                    totalSteps: integratedJourney.queue.length,
-                    nextModuleName: getNextModuleName(),
-                    onProceedNext: handleAdvanceIntegratedJourney,
-                  }
-                : undefined
-            }
-          />
-        </main>
-      ) : (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      {/* ===================== ÂNCORAS QUIZ / BONUS / RESULT (ASSESSMENT & HISTÓRICO) ===================== */}
+      {(
+        (activeView === 'assessment' && activeAssessment === 'ancoras') ||
+        (activeView === 'history' && selectedHistoryPersonId !== null && historyReportTab === 'ancoras' && (() => {
+          const sum = getModuleSummary();
+          if (selectedHistoryPersonId === 'self') return sum.ancoras.isCompleted;
+          return INTEGRATED_DEMO_PROFILES.some((d) => d.id === selectedHistoryPersonId);
+        })())
+      ) && (
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         {/* ===================== HOME SCREEN ===================== */}
-        {screen === 'home' && (
+        {activeView === 'assessment' && screen === 'home' && (
           <div className="space-y-10 animate-in fade-in duration-300">
             {/* HERO */}
             <div className="text-center max-w-2xl mx-auto space-y-4">
@@ -1769,7 +1692,7 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
         )}
 
         {/* ===================== QUIZ SCREEN ===================== */}
-        {screen === 'quiz' && (() => {
+        {activeView === 'assessment' && screen === 'quiz' && (() => {
           const blockQuestions = currentBlockQuestions();
           const isFirstBlock = blockIndex === 0;
           const isLastBlock = blockIndex + 1 >= TOTAL_BLOCKS;
@@ -1823,7 +1746,7 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                 </div>
 
                 {/* Stepper Dots / Bars */}
-                <div className="grid grid-cols-10 gap-1.5 sm:gap-2">
+                <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5 sm:gap-2">
                   {Array.from({ length: TOTAL_BLOCKS }).map((_, i) => {
                     const isDone = i < blockIndex;
                     const isCurrent = i === blockIndex;
@@ -1902,7 +1825,7 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                       </p>
 
                       {/* Tactile Rating Selector 1 to 6 */}
-                      <div className="grid grid-cols-6 gap-1.5 sm:gap-2.5">
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-2.5">
                         {[1, 2, 3, 4, 5, 6].map((val) => {
                           const isSelected = currentRating === val;
                           const desc = SCALE_DESCRIPTIONS[val];
@@ -1997,7 +1920,7 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
         })()}
 
         {/* ===================== BONUS STEP SCREEN ===================== */}
-        {screen === 'bonus' && (() => {
+        {activeView === 'assessment' && screen === 'bonus' && (() => {
           const candidates = bonusCandidates();
           const requiredBonus = Math.min(BONUS_LIMIT, candidates.length);
           const isSatisfied = bonus.length === requiredBonus;
@@ -2150,8 +2073,21 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
         })()}
 
         {/* ===================== RESULT REPORT SCREEN ===================== */}
-        {screen === 'result' && (() => {
-          const averages = computeAverages(ratings, bonus);
+        {((activeView === 'assessment' && screen === 'result') ||
+          (activeView === 'history' && selectedHistoryPersonId !== null && historyReportTab === 'ancoras')) && (() => {
+          const isHistoryView = activeView === 'history';
+          const summary = getModuleSummary();
+          const demoMatch = isHistoryView && selectedHistoryPersonId !== 'self'
+            ? INTEGRATED_DEMO_PROFILES.find((d) => d.id === selectedHistoryPersonId)
+            : undefined;
+          const activeRatings = isHistoryView
+            ? (demoMatch ? demoMatch.ancorasRatings : summary.activeAncorasRatings)
+            : ratings;
+          const activeBonus = isHistoryView
+            ? (demoMatch ? demoMatch.ancorasBonus : summary.activeAncorasBonus)
+            : bonus;
+
+          const averages = computeAverages(activeRatings, activeBonus);
           const sortedLetters = sortAnchorsByScore(averages);
           const dominant = sortedLetters[0];
           const secondary = sortedLetters[1];
@@ -2163,7 +2099,7 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
           return (
             <div className="space-y-8 animate-in fade-in duration-300">
               {/* Banner de Avanço na Jornada Integrada se ativo */}
-              {integratedJourney.active && (
+              {!isHistoryView && integratedJourney.active && (
                 <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-indigo-500/15 to-emerald-500/15 border-2 border-emerald-500/40 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
                   <div>
                     <div className="flex items-center gap-2 mb-1.5">
@@ -2175,23 +2111,21 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                       </span>
                     </div>
                     <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 font-medium">
-                      Você concluiu o teste Âncoras de Carreira. Você pode analisar seu relatório detalhado abaixo ou avançar agora para a próxima etapa: <strong>{getNextModuleName()}</strong>.
+                      Você concluiu o teste Âncoras de Carreira. {getNextModuleName() ? <>Avance agora para a próxima etapa: <strong>{getNextModuleName()}</strong>.</> : 'Jornada finalizada!'}
                     </p>
                   </div>
-                  {getNextModuleName() && (
-                    <button
-                      onClick={handleAdvanceIntegratedJourney}
-                      className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer shrink-0 hover:scale-105 active:scale-95"
-                    >
-                      <span>Avançar para {getNextModuleName()}</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  )}
+                  <button
+                    onClick={handleAdvanceIntegratedJourney}
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer shrink-0 hover:scale-105 active:scale-95"
+                  >
+                    <span>{getNextModuleName() ? `Avançar para ${getNextModuleName()}` : 'Concluir Jornada e Ver Relatório Integrado'}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
               )}
 
-              {/* DEMO NOTICE BANNER (if in demo mode) */}
-              {isDemoMode && (
+              {/* DEMO NOTICE BANNER (never in Histórico) */}
+              {!isHistoryView && isDemoMode && (
                 <div
                   className="p-4 sm:p-5 rounded-2xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-amber-500/10 border-amber-500/30 no-print"
                 >
@@ -2259,11 +2193,19 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                   <div className="space-y-3">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/40">
                       <Award className="w-3.5 h-3.5" />
-                      <span>{isDemoMode ? 'Relatório Demonstrativo' : 'Diagnóstico Concluído'}</span>
+                      <span>
+                        {isHistoryView
+                          ? demoMatch
+                            ? `Histórico · ${demoMatch.name}`
+                            : 'Diagnóstico Concluído'
+                          : isDemoMode
+                          ? 'Relatório Demonstrativo'
+                          : 'Diagnóstico Concluído'}
+                      </span>
                     </div>
 
                     <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
-                      Seu Relatório de Âncoras
+                      {demoMatch ? `Relatório de Âncoras — ${demoMatch.name}` : 'Seu Relatório de Âncoras'}
                     </h1>
 
                     <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -2351,7 +2293,7 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
               </div>
 
               {/* REPORT NAVIGATION TABS */}
-              <div className="flex items-center gap-2 border-b overflow-x-auto no-print pb-px"
+              <div className="flex items-center gap-1 sm:gap-2 border-b overflow-x-auto no-scrollbar no-print pb-px"
                 style={{ borderColor: 'var(--border-color)' }}
               >
                 {[
@@ -2379,7 +2321,7 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                   <button
                     key={tab.id}
                     onClick={() => setResultTab(tab.id as ResultTab)}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-t-xl font-semibold text-xs sm:text-sm whitespace-nowrap transition-all border-b-2 cursor-pointer ${
+                    className={`flex items-center gap-2 px-3 sm:px-4 py-3 rounded-t-xl font-semibold text-xs sm:text-sm whitespace-nowrap shrink-0 transition-all border-b-2 cursor-pointer ${
                       resultTab === tab.id
                         ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20'
                         : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/50 dark:hover:bg-slate-800/40'
@@ -3119,8 +3061,8 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
 
                           <div className="space-y-2">
                             {anchorQuestions.map((q) => {
-                              const r = ratings[q.number] || 0;
-                              const isBonus = bonus.includes(q.number);
+                              const r = activeRatings[q.number] || 0;
+                              const isBonus = activeBonus.includes(q.number);
 
                               return (
                                 <div
@@ -3162,25 +3104,27 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                 style={{ borderColor: 'var(--border-color)' }}
               >
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openResetDialog(() => {
-                        setBlockIndex(0);
-                        setRatings({});
-                        setBonus([]);
-                        safeStorage.clear();
-                        setSavedProgress(null);
-                        setIsDemoMode(false);
-                        setScreen('home');
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      })
-                    }
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all cursor-pointer"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>{isDemoMode ? 'Sair do Modo Exemplo' : 'Realizar Novo Teste'}</span>
-                  </button>
+                  {!isHistoryView && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openResetDialog(() => {
+                          setBlockIndex(0);
+                          setRatings({});
+                          setBonus([]);
+                          safeStorage.clear();
+                          setSavedProgress(null);
+                          setIsDemoMode(false);
+                          setScreen('home');
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        })
+                      }
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all cursor-pointer"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>{isDemoMode ? 'Sair do Modo Exemplo' : 'Realizar Novo Teste'}</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -3371,17 +3315,17 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                       Instrumentos da Jornada (Personalize a seleção):
                     </label>
 
-                    {/* Step 1: Âncoras */}
+                    {/* Step 1: RIASEC */}
                     <div
                       onClick={() =>
                         setSelectedIntegratedModules((prev) => ({
                           ...prev,
-                          ancoras: !prev.ancoras,
+                          riasec: !prev.riasec,
                         }))
                       }
                       className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                        selectedIntegratedModules.ancoras
-                          ? 'border-indigo-500/60 bg-indigo-50/50 dark:bg-indigo-950/20'
+                        selectedIntegratedModules.riasec
+                          ? 'border-indigo-600/60 bg-indigo-50/50 dark:bg-indigo-950/20'
                           : 'border-slate-200 dark:border-slate-800 opacity-60'
                       }`}
                     >
@@ -3392,20 +3336,20 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-                              Âncoras de Carreira (Edgar Schein • MIT)
+                              RIASEC Tipos Vocacionais (John Holland)
                             </span>
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold border border-indigo-500/20">
-                              Valores
+                              Descoberta
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                            40 afirmações • ~10 min • Escala Likert 1 a 6 + 3 escolhas bônus
+                            12 blocos de ranqueamento (72 itens) • ~12 min • Código Holland
                           </p>
                         </div>
                       </div>
 
                       <div className="shrink-0 text-indigo-600 dark:text-indigo-400">
-                        {selectedIntegratedModules.ancoras ? (
+                        {selectedIntegratedModules.riasec ? (
                           <CheckSquare className="w-5 h-5" />
                         ) : (
                           <Square className="w-5 h-5 text-slate-400" />
@@ -3437,7 +3381,7 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                               CABIN Interesses Básicos (Su et al., 2019)
                             </span>
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 font-semibold border border-teal-500/20">
-                              Atividades
+                              Exploração
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -3455,17 +3399,17 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                       </div>
                     </div>
 
-                    {/* Step 3: RIASEC */}
+                    {/* Step 3: Âncoras */}
                     <div
                       onClick={() =>
                         setSelectedIntegratedModules((prev) => ({
                           ...prev,
-                          riasec: !prev.riasec,
+                          ancoras: !prev.ancoras,
                         }))
                       }
                       className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                        selectedIntegratedModules.riasec
-                          ? 'border-indigo-600/60 bg-indigo-50/50 dark:bg-indigo-950/20'
+                        selectedIntegratedModules.ancoras
+                          ? 'border-indigo-500/60 bg-indigo-50/50 dark:bg-indigo-950/20'
                           : 'border-slate-200 dark:border-slate-800 opacity-60'
                       }`}
                     >
@@ -3476,20 +3420,20 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-                              RIASEC Tipos Vocacionais (John Holland)
+                              Âncoras de Carreira (Edgar Schein • MIT)
                             </span>
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold border border-indigo-500/20">
-                              Ambientes
+                              Direcionamento
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                            12 blocos de ranqueamento (72 itens) • ~12 min • Código Holland
+                            40 afirmações • ~10 min • Escala Likert 1 a 6 + 3 escolhas bônus
                           </p>
                         </div>
                       </div>
 
                       <div className="shrink-0 text-indigo-600 dark:text-indigo-400">
-                        {selectedIntegratedModules.riasec ? (
+                        {selectedIntegratedModules.ancoras ? (
                           <CheckSquare className="w-5 h-5" />
                         ) : (
                           <Square className="w-5 h-5 text-slate-400" />
@@ -3536,31 +3480,31 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                   </p>
 
                   <div className="space-y-3">
-                    {/* Option 1: Âncoras */}
+                    {/* Option 1: RIASEC */}
                     <div
-                      onClick={() => setSelectedIndividualTest('ancoras')}
+                      onClick={() => setSelectedIndividualTest('riasec')}
                       className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
-                        selectedIndividualTest === 'ancoras'
-                          ? 'border-indigo-500 bg-indigo-500/10 ring-2 ring-indigo-500/20 shadow-sm'
+                        selectedIndividualTest === 'riasec'
+                          ? 'border-indigo-600 bg-indigo-600/10 ring-2 ring-indigo-600/20 shadow-md'
                           : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 border-indigo-600">
-                        {selectedIndividualTest === 'ancoras' && (
+                        {selectedIndividualTest === 'riasec' && (
                           <div className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
                         )}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                            1. Âncoras de Carreira (Edgar Schein • MIT)
+                            1. RIASEC Tipos Vocacionais (John Holland)
                           </h4>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                            ~10 min
+                            ~12 min
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                          Mapeia seus valores e motivações nucleares profissionais dos quais você não abriria mão em uma decisão de carreira.
+                          Descobre sua afinidade com ambientes organizacionais e calcula seu Código Holland de 3 letras dominantes.
                         </p>
                       </div>
                     </div>
@@ -3594,31 +3538,31 @@ Relatório confidencial gerado com base no instrumento de 40 afirmações.
                       </div>
                     </div>
 
-                    {/* Option 3: RIASEC */}
+                    {/* Option 3: Âncoras */}
                     <div
-                      onClick={() => setSelectedIndividualTest('riasec')}
+                      onClick={() => setSelectedIndividualTest('ancoras')}
                       className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
-                        selectedIndividualTest === 'riasec'
-                          ? 'border-indigo-600 bg-indigo-600/10 ring-2 ring-indigo-600/20 shadow-md'
+                        selectedIndividualTest === 'ancoras'
+                          ? 'border-indigo-500 bg-indigo-500/10 ring-2 ring-indigo-500/20 shadow-sm'
                           : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 border-indigo-600">
-                        {selectedIndividualTest === 'riasec' && (
+                        {selectedIndividualTest === 'ancoras' && (
                           <div className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
                         )}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                            3. RIASEC Tipos Vocacionais (John Holland)
+                            3. Âncoras de Carreira (Edgar Schein • MIT)
                           </h4>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                            ~12 min
+                            ~10 min
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                          Descobre sua afinidade com ambientes organizacionais e calcula seu Código Holland de 3 letras dominantes.
+                          Mapeia seus valores e motivações nucleares profissionais dos quais você não abriria mão em uma decisão de carreira.
                         </p>
                       </div>
                     </div>

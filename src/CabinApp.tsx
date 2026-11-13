@@ -41,7 +41,11 @@ const TOTAL_PAGES = Math.ceil(CABIN_ITEMS.length / ITEMS_PER_PAGE); // 11 pages
 
 interface CabinAppProps {
   onBackToMain?: () => void;
+  onViewReports?: (tab?: 'cabin' | 'integrated') => void;
   initialStep?: 'intro' | 'instructions' | 'test' | 'review' | 'report';
+  externalAnswers?: Record<number, number>;
+  reportOnly?: boolean;
+  participantName?: string;
   integratedInfo?: {
     currentStepNumber: number;
     totalSteps: number;
@@ -52,28 +56,44 @@ interface CabinAppProps {
 
 export const CabinApp: React.FC<CabinAppProps> = ({
   onBackToMain,
+  onViewReports,
   initialStep,
+  externalAnswers,
+  reportOnly = false,
+  participantName,
   integratedInfo,
 }) => {
   const [step, setStep] = useState<'intro' | 'instructions' | 'test' | 'review' | 'processing' | 'report'>(
-    initialStep || 'intro'
+    reportOnly ? 'report' : (initialStep || 'intro')
   );
-  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [answers, setAnswers] = useState<Record<number, number>>(externalAnswers || {});
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [activeTab, setActiveTab] = useState<'setpoint' | 'scales' | 'clusters' | 'applied'>('setpoint');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDimensionFilter, setSelectedDimensionFilter] = useState<string>('ALL');
   const [expandedScaleId, setExpandedScaleId] = useState<number | null>(null);
 
-  // Sync initialStep if passed from parent
+  // Sync initialStep / reportOnly if passed from parent
   useEffect(() => {
+    if (reportOnly) {
+      setStep('report');
+      return;
+    }
     if (initialStep) {
       setStep(initialStep);
     }
-  }, [initialStep]);
+  }, [initialStep, reportOnly]);
 
-  // Restore saved answers from localStorage
+  // Sync externalAnswers when provided
   useEffect(() => {
+    if (externalAnswers) {
+      setAnswers(externalAnswers);
+    }
+  }, [externalAnswers]);
+
+  // Restore saved answers from localStorage (only when not in reportOnly mode)
+  useEffect(() => {
+    if (reportOnly || externalAnswers) return;
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -92,10 +112,11 @@ export const CabinApp: React.FC<CabinAppProps> = ({
     } catch (e) {
       console.error('Error loading CABIN storage', e);
     }
-  }, [initialStep]);
+  }, [initialStep, reportOnly, externalAnswers]);
 
-  // Save to localStorage on change
+  // Save to localStorage on change (only when not in reportOnly mode)
   useEffect(() => {
+    if (reportOnly || externalAnswers) return;
     try {
       localStorage.setItem(
         STORAGE_KEY,
@@ -109,15 +130,17 @@ export const CabinApp: React.FC<CabinAppProps> = ({
     } catch (e) {
       console.error('Error saving CABIN storage', e);
     }
-  }, [answers, step, currentPage]);
+  }, [answers, step, currentPage, reportOnly, externalAnswers]);
+
+  const activeAnswers = externalAnswers || answers;
 
   const scores: CabinScores = useMemo(() => {
-    return calculateCabinScores(answers);
-  }, [answers]);
+    return calculateCabinScores(activeAnswers);
+  }, [activeAnswers]);
 
   const answeredCount = useMemo(() => {
-    return Object.keys(answers).length;
-  }, [answers]);
+    return Object.keys(activeAnswers).length;
+  }, [activeAnswers]);
 
   const completionPercentage = Math.round((answeredCount / CABIN_ITEMS.length) * 100);
 
@@ -167,8 +190,12 @@ export const CabinApp: React.FC<CabinAppProps> = ({
     setStep('processing');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setTimeout(() => {
-      setStep('report');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (onViewReports) {
+        onViewReports('cabin');
+      } else {
+        setStep('report');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     }, 800);
   };
 
@@ -245,7 +272,7 @@ export const CabinApp: React.FC<CabinAppProps> = ({
   // -------------------------------------------------------------
   if (step === 'intro') {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         {/* Banner CABIN */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950 via-slate-900 to-teal-950 text-white p-8 sm:p-12 border border-indigo-500/20 shadow-2xl mb-8">
           <div className="absolute top-0 right-0 -mr-16 -mt-16 w-80 h-80 rounded-full bg-teal-500/10 blur-3xl pointer-events-none" />
@@ -473,7 +500,7 @@ export const CabinApp: React.FC<CabinAppProps> = ({
     const pageEndNum = Math.min(currentPage * ITEMS_PER_PAGE, CABIN_ITEMS.length);
 
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         {/* Banner de Jornada Integrada se ativo */}
         {integratedInfo && (
           <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-teal-500/15 via-indigo-500/10 to-teal-500/15 border border-teal-500/30 flex flex-wrap items-center justify-between gap-3 shadow-sm">
@@ -648,7 +675,7 @@ export const CabinApp: React.FC<CabinAppProps> = ({
     const unAnsweredCount = CABIN_ITEMS.length - answeredCount;
 
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm mb-6">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
             <div>
@@ -785,7 +812,7 @@ export const CabinApp: React.FC<CabinAppProps> = ({
   // VIEW: EXECUTIVE REPORT
   // -------------------------------------------------------------
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
       {/* Banner de Avanço na Jornada Integrada se ativo */}
       {integratedInfo?.onProceedNext && (
         <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-teal-500/15 via-indigo-500/15 to-teal-500/15 border-2 border-teal-500/40 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
@@ -821,7 +848,7 @@ export const CabinApp: React.FC<CabinAppProps> = ({
             </div>
             <div>
               <div className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">
-                <span>Assessment COMET • Relatório Individual</span>
+                <span>Relatório CABIN {participantName ? `• ${participantName}` : '• Assessment COMET'}</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100">
                 Perfil de Interesses Básicos CABIN
@@ -830,20 +857,31 @@ export const CabinApp: React.FC<CabinAppProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 print:hidden">
+            {onViewReports && !reportOnly && (
+              <button
+                type="button"
+                onClick={() => onViewReports('integrated')}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                <span>Ver Dossiê Integrado</span>
+              </button>
+            )}
             <button
               onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Imprimir / PDF</span>
             </button>
-            <button
-              onClick={handleResetTest}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Novo Teste</span>
-            </button>
+            {!reportOnly && (
+              <button
+                onClick={handleResetTest}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Novo Teste</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1194,7 +1232,7 @@ export const CabinApp: React.FC<CabinAppProps> = ({
                         <div className="space-y-1.5">
                           {scale.itemIds.map((itemId) => {
                             const itemObj = CABIN_ITEMS.find((it) => it.id === itemId);
-                            const val = answers[itemId];
+                            const val = activeAnswers[itemId];
                             return (
                               <div
                                 key={itemId}
